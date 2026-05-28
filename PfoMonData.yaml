@@ -1,0 +1,48 @@
+package: GaudiPfoMonitoring
+namespace: GaudiPfoMonitoring
+collection_id: 1001
+members:
+  - name: energy
+    type: float
+  - name: pdg
+    type: int32_t
+  - name: fNeutral
+    type: float
+  - name: fPhoton
+    type: float
+  - name: fCharged
+    type: float
+  - name: alpha
+    type: float
+  - name: px
+    type: float
+  - name: py
+    type: float
+  - name: pz
+    type: float
+  - name: mass
+    type: float
+  - name: nHits
+    type: uint32_t
+  - name: nMipLikeHits
+    type: uint32_t
+  - name: nEcalHits
+    type: uint32_t
+  - name: nMipEcalHits
+    type: uint32_t
+  - name: nHcalHits
+    type: uint32_t
+  - name: nMipHcalHits
+    type: uint32_t
+  - name: minClusterDistance
+    type: float
+  - name: maxCosOpeningAngle
+    type: float
+  - name: startLayer
+    type: uint32_t
+  - name: nLayers
+    type: uint32_t
+  - name: mcPdg
+    type: int32_t
+  - name: mcEnergy
+    type: float

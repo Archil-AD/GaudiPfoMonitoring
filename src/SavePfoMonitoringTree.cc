@@ -1,5 +1,6 @@
 #include "SavePfoMonitoringTree.h"
-#include "PfoMonitoringData.h"
+// Include the PODIO generated collection header
+#include "PfoMonDataCollection.h"
 
 DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
 
@@ -29,8 +30,7 @@ namespace GaudiPfoMonitoring
     m_pfo_maxCosOpeningAngle(),
     m_pfo_startLayer(),
     m_pfo_nLayers(),
-    m_pfo_mcPdg(),
-    m_pfo_mcGenStatus(),
+    m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
     m_pfo_mcEnergy(),
     m_eventDataSvc("EventDataSvc", "SavePfoMonitoringTree")
     {
@@ -77,8 +77,7 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("pfo_maxCosOpeningAngle", &m_pfo_maxCosOpeningAngle);
         m_outputTree->Branch("pfo_startLayer", &m_pfo_startLayer);
         m_outputTree->Branch("pfo_nLayers", &m_pfo_nLayers);
-        m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg);
-        m_outputTree->Branch("pfo_mcGenStatus", &m_pfo_mcGenStatus);
+        m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg); // Keep mcPdg branch
         m_outputTree->Branch("pfo_mcEnergy", &m_pfo_mcEnergy);
 
         info() << "Successfully initialized and opened ROOT file: GaudiPfoMonitoring.root" << endmsg;
@@ -106,40 +105,47 @@ namespace GaudiPfoMonitoring
         m_pfo_maxCosOpeningAngle.clear();
         m_pfo_startLayer.clear();
         m_pfo_nLayers.clear();
-        m_pfo_mcPdg.clear();
-        m_pfo_mcGenStatus.clear();
+        m_pfo_mcPdg.clear(); // Clear mcPdg
         m_pfo_mcEnergy.clear();
 
-        // Retrieve data from the global buffer populated by PfoMonitoringAlgorithm
-        const std::vector<lc_content::PfoData>& pfoDataBuffer = lc_content::g_pfoMonitoringBuffer;
+        // Retrieve the PODIO collection from the Event Store
+        const GaudiPfoMonitoring::PfoMonDataCollection* pfoDataBuffer = nullptr;
+        if (eventSvc()->retrieveObject("/Event/PfoMonitoringData", (DataObject*&)pfoDataBuffer).isFailure()) {
+            warning() << "PfoMonitoringData not found. Tree will have empty branches for this event." << endmsg;
+            m_outputTree->Fill();
+            return StatusCode::SUCCESS;
+        }
 
-        for (const auto& pfoData : pfoDataBuffer)
-        {
-            m_pfo_energy.push_back(pfoData.pfo_energy);
-            m_pfo_pdg.push_back(pfoData.pfo_pdg);
-            m_pfo_fNeutral.push_back(pfoData.pfo_fNeutral);
-            m_pfo_fPhoton.push_back(pfoData.pfo_fPhoton);
-            m_pfo_fCharged.push_back(pfoData.pfo_fCharged);
-            m_pfo_alpha.push_back(pfoData.pfo_alpha);
-            m_pfo_px.push_back(pfoData.pfo_px);
-            m_pfo_py.push_back(pfoData.pfo_py);
-            m_pfo_pz.push_back(pfoData.pfo_pz);
-            m_pfo_mass.push_back(pfoData.pfo_mass);
-            m_pfo_nHits.push_back(pfoData.pfo_nHits);
-            m_pfo_nMipLikeHits.push_back(pfoData.pfo_nMipLikeHits);
-            m_pfo_nEcalHits.push_back(pfoData.pfo_nEcalHits);
-            m_pfo_nMipEcalHits.push_back(pfoData.pfo_nMipEcalHits);
-            m_pfo_nHcalHits.push_back(pfoData.pfo_nHcalHits);
-            m_pfo_nMipHcalHits.push_back(pfoData.pfo_nMipHcalHits);
-            m_pfo_minClusterDistance.push_back(pfoData.pfo_minClusterDistance);
-            m_pfo_maxCosOpeningAngle.push_back(pfoData.pfo_maxCosOpeningAngle);
-            m_pfo_startLayer.push_back(pfoData.pfo_startLayer);
-            m_pfo_nLayers.push_back(pfoData.pfo_nLayers);
-            m_pfo_mcPdg.push_back(pfoData.pfo_mcPdg);
-            m_pfo_mcGenStatus.push_back(pfoData.pfo_mcGenStatus);
-            m_pfo_mcEnergy.push_back(pfoData.pfo_mcEnergy);
+        debug() << "Saving " << pfoDataBuffer->size() << " PFOs to Tree." << endmsg;
+
+        for (const auto& pfoData : *pfoDataBuffer) // Dereference the pointer here
+        {     
+            m_pfo_energy.push_back(pfoData.getEnergy());
+            m_pfo_pdg.push_back(pfoData.getPdg());
+            m_pfo_fNeutral.push_back(pfoData.getFNeutral());
+            m_pfo_fPhoton.push_back(pfoData.getFPhoton());
+            m_pfo_fCharged.push_back(pfoData.getFCharged());
+            m_pfo_alpha.push_back(pfoData.getAlpha());
+            m_pfo_px.push_back(pfoData.getPx());
+            m_pfo_py.push_back(pfoData.getPy());
+            m_pfo_pz.push_back(pfoData.getPz());
+            m_pfo_mass.push_back(pfoData.getMass());
+            m_pfo_nHits.push_back(pfoData.getNHits());
+            m_pfo_nMipLikeHits.push_back(pfoData.getNMipLikeHits());
+            m_pfo_nEcalHits.push_back(pfoData.getNEcalHits());
+            m_pfo_nMipEcalHits.push_back(pfoData.getNMipEcalHits());
+            m_pfo_nHcalHits.push_back(pfoData.getNHcalHits());
+            m_pfo_nMipHcalHits.push_back(pfoData.getNMipHcalHits());
+            m_pfo_minClusterDistance.push_back(pfoData.getMinClusterDistance());
+            m_pfo_maxCosOpeningAngle.push_back(pfoData.getMaxCosOpeningAngle());
+            m_pfo_startLayer.push_back(pfoData.getStartLayer());
+            m_pfo_nLayers.push_back(pfoData.getNLayers());
+            m_pfo_mcPdg.push_back(pfoData.getMcPdg());
+            m_pfo_mcEnergy.push_back(pfoData.getMcEnergy());
         }
         m_outputTree->Fill();
+
+        // Note: No clear() needed! Gaudi clears the Event Store automatically.
 
         return StatusCode::SUCCESS;
     }

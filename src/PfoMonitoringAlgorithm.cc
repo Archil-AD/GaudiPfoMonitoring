@@ -1,6 +1,6 @@
 
 /**
- *  @file   LCContent/src/LCMonitoring/PfoMonitoringAlgorithm.cc
+ *  @file   GaudiPfoMonitoring/src/PfoMonitoringAlgorithm.cc
  * 
  *  @brief  Implementation of the dump pfos monitoring algorithm class
  * 
@@ -9,13 +9,19 @@
 
 #include "Pandora/AlgorithmHeaders.h"
 
+#include "GaudiKernel/Bootstrap.h"
+#include "GaudiKernel/SmartIF.h"
+#include "GaudiKernel/IDataProviderSvc.h"
+#include "GaudiKernel/ISvcLocator.h"
+
 #include "LCHelpers/ClusterHelper.h"
 #include "LCHelpers/ReclusterHelper.h"
 #include "LCHelpers/SortingHelper.h"
-#include "PfoMonitoringData.h"
 #include "PfoMonitoringAlgorithm.h"
 
 #include "EVENT/MCParticle.h"
+
+#include "PfoMonDataCollection.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -40,6 +46,9 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm() :
     m_nWrongChargedHadronPfo(0),
     m_neutralHadronEnergyFractionCut(0.7)
 {
+    std::cout << " ------------------------------------------------------------ " << std::endl;
+    std::cout << " ------------ PfoMonitoringAlgorithm initialized ------------ " << std::endl;
+    std::cout << " ------------------------------------------------------------ " << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -58,10 +67,27 @@ PfoMonitoringAlgorithm::~PfoMonitoringAlgorithm()
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode PfoMonitoringAlgorithm::Run()
+pandora::StatusCode PfoMonitoringAlgorithm::Run()
 {
-    // clear the global PfoData buffer
-    lc_content::g_pfoMonitoringBuffer.clear();
+    // 1. Get the Gaudi Event Data Service
+    SmartIF<IDataProviderSvc> eventSvc = Gaudi::svcLocator()->service<IDataProviderSvc>("EventDataSvc");
+    if (!eventSvc)
+    {
+        std::cout << "PfoMonitoringAlgorithm: Could not locate EventDataSvc" << std::endl;
+        return STATUS_CODE_FAILURE;
+    }
+
+    // 2. Retrieve or Create the PODIO collection
+    GaudiPfoMonitoring::PfoMonDataCollection* pfoColl = nullptr;
+    if (eventSvc->retrieveObject("/Event/PfoMonitoringData", (DataObject*&)pfoColl).isFailure())
+    {
+        pfoColl = new GaudiPfoMonitoring::PfoMonDataCollection();
+        if (eventSvc->registerObject("/Event/PfoMonitoringData", pfoColl).isFailure()) {
+            std::cout << "PfoMonitoringAlgorithm: Could not register PfoMonitoringData" << std::endl;
+            delete pfoColl;
+            return STATUS_CODE_FAILURE;
+        }
+    }
 
     m_trackMcPfoTargets.clear();
 
@@ -76,12 +102,17 @@ StatusCode PfoMonitoringAlgorithm::Run()
     const PfoList *pPfoList = NULL;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pPfoList));
 
+    if (pPfoList->empty()) {
+        // If this prints, your Pandora XML is calling this algorithm too early 
+        // or the "Current PFO List" is not set correctly.
+        std::cout << "PfoMonitoringAlgorithm: Current PFO list is EMPTY." << std::endl;
+    }
+
     const ClusterList *pAllClusters = NULL;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pAllClusters));
 
     for (PfoList::const_iterator pfoIter = pPfoList->begin(); pfoIter != pPfoList->end(); ++pfoIter)
     {
-        lc_content::PfoData currentPfoData;
         const ParticleFlowObject *const pPfo = *pfoIter;
 
         const TrackList &trackList(pPfo->GetTrackList());
@@ -149,50 +180,65 @@ StatusCode PfoMonitoringAlgorithm::Run()
             }
         }
 
+        // Create the monitoring object and fill reconstructed information first
+        auto &pfoData = pfoColl->create();
+        pfoData.setEnergy(pfoEnergy);
+        pfoData.setPdg(pfoPid);
+        pfoData.setPx(px);
+        pfoData.setPy(py);
+        pfoData.setPz(pz);
+        pfoData.setMass(mass);
+        pfoData.setNHits(nHits);
+        pfoData.setNMipLikeHits(nMipLikeHits);
+        pfoData.setNEcalHits(nEcalHits);
+        pfoData.setNMipEcalHits(nMipEcalHits);
+        pfoData.setNHcalHits(nHcalHits);
+        pfoData.setNMipHcalHits(nMipHcalHits);
+        pfoData.setMinClusterDistance(minClusterDistance);
+        pfoData.setMaxCosOpeningAngle(maxCosOpeningAngle);
+        pfoData.setStartLayer(pfoStartLayer);
+        pfoData.setNLayers(pfoNLayers);
+        pfoData.setAlpha(0.f);
+
+        // Default MC values in case matching fails
+        pfoData.setMcPdg(0);
+        pfoData.setMcEnergy(0.f);
+
         if (trackList.size() == 1)  // charged PFO
         {
+           pfoData.setFNeutral(0.f);
+           pfoData.setFPhoton(0.f);
+           pfoData.setFCharged(1.f);
+
            try{
               const Track *const pTrack = trackList.front();
               const MCParticle *const pMCParticle(MCParticleHelper::GetMainMCParticle(pTrack));
-              m_trackMcPfoTargets.push_back(pMCParticle);
+              
+              if (pMCParticle)
+              {
+                  m_trackMcPfoTargets.push_back(pMCParticle);
 
-              // if MC particle is pi+/-, K+/- or proton then this is a correct assignment
-              if( std::abs(pMCParticle->GetParticleId()) == 211 ||
-                  std::abs(pMCParticle->GetParticleId()) == 321 ||
-                  std::abs(pMCParticle->GetParticleId()) == 2212) m_nCorrectChargedHadronPfo++;
-              else m_nWrongChargedHadronPfo++; // those can be electrons and muons
+                  // if MC particle is pi+/-, K+/- or proton then this is a correct assignment
+                  if( std::abs(pMCParticle->GetParticleId()) == 211 ||
+                      std::abs(pMCParticle->GetParticleId()) == 321 ||
+                      std::abs(pMCParticle->GetParticleId()) == 2212) m_nCorrectChargedHadronPfo++;
+                  else m_nWrongChargedHadronPfo++; 
 
-              currentPfoData.pfo_energy = pfoEnergy;
-              currentPfoData.pfo_pdg = pfoPid;
-              currentPfoData.pfo_px = px;
-              currentPfoData.pfo_py = py;
-              currentPfoData.pfo_pz = pz;
-              currentPfoData.pfo_mass = mass;
-              currentPfoData.pfo_nHits = nHits;
-              currentPfoData.pfo_nMipLikeHits = nMipLikeHits;
-              currentPfoData.pfo_nEcalHits = nEcalHits;
-              currentPfoData.pfo_nMipEcalHits = nMipEcalHits;
-              currentPfoData.pfo_nHcalHits = nHcalHits;
-              currentPfoData.pfo_nMipHcalHits = nMipHcalHits;
-              currentPfoData.pfo_minClusterDistance = minClusterDistance;
-              currentPfoData.pfo_maxCosOpeningAngle = maxCosOpeningAngle;
-              currentPfoData.pfo_startLayer = pfoStartLayer;
-              currentPfoData.pfo_nLayers = pfoNLayers;
-              currentPfoData.pfo_fNeutral = 0.f;
-              currentPfoData.pfo_fPhoton = 0.f;
-              currentPfoData.pfo_fCharged = 0.f;
-              currentPfoData.pfo_alpha = 0.f;
-              currentPfoData.pfo_mcPdg = pMCParticle->GetParticleId();
-//              currentPfoData.pfo_mcGenStatus = reinterpret_cast<const edm4hep::MCParticle*>(pMCParticle->GetUid())->getGeneratorStatus();
-              currentPfoData.pfo_mcEnergy = pMCParticle->GetEnergy();
-              lc_content::g_pfoMonitoringBuffer.push_back(currentPfoData);
+                  pfoData.setMcPdg(pMCParticle->GetParticleId());
+                  pfoData.setMcEnergy(pMCParticle->GetEnergy());
+              }
            }
-           catch (StatusCodeException &)
+           catch (StatusCodeException &e)
            {
+               // This usually means Track-to-MC matching is not initialized in the Pandora instance
+               static int errorCount = 0;
+               if (errorCount++ < 10) std::cout << "PfoMonitoring: MC match not found for track: " << e.ToString() << std::endl;
            }
         }
         else if( trackList.empty() ) // neutral PFO
         {
+           float fCharged(0.f), fPhoton(0.f), fNeutral(0.f);
+
            try{
              // store each MC particle (reco) energy contribution in this PFO
              MCParticleToFloatMap mcParticleContributions;
@@ -202,10 +248,6 @@ StatusCode PfoMonitoringAlgorithm::Run()
              float neutralEnergy(0.f);
              float photonEnergy(0.f);
              float chargedEnergy(0.f);
-
-             float fCharged(0.f);
-             float fPhoton(0.f);
-             float fNeutral(0.f);
 
              // find energy fractions and the MC particle with largest energy contribution
              for (ClusterList::const_iterator clusterIter = clusterList.begin(); clusterIter != clusterList.end(); ++clusterIter)
@@ -228,6 +270,10 @@ StatusCode PfoMonitoringAlgorithm::Run()
                fNeutral = neutralEnergy/totEnergy;
              }
 
+             pfoData.setFNeutral(fNeutral);
+             pfoData.setFPhoton(fPhoton);
+             pfoData.setFCharged(fCharged);
+
              // Find mc particle with largest associated energy in the given PFO
              const MCParticle *pBestMCMatch(NULL);
              float maximumEnergy(0.f);
@@ -245,49 +291,24 @@ StatusCode PfoMonitoringAlgorithm::Run()
                  }
              }
 
-             // Fake natural PFO
-             if(pBestMCMatch == NULL) {
-                continue;
-             }
-             //const MCParticle *const pMainClustersMCParticle(MCParticleHelper::GetMainMCParticle(&clusterList));
-
-
-             if ( fNeutral > m_neutralHadronEnergyFractionCut )
+             if (pBestMCMatch)
              {
-                m_nCorrectNeutralHadronPfo++;
-             }
-             else
-             {
-                m_nWrongNeutralHadronPfo++;
-             }
+                 if ( fNeutral > m_neutralHadronEnergyFractionCut )
+                    m_nCorrectNeutralHadronPfo++;
+                 else
+                    m_nWrongNeutralHadronPfo++;
 
-             currentPfoData.pfo_energy = pfoEnergy;
-             currentPfoData.pfo_pdg = pfoPid;
-             currentPfoData.pfo_px = px;
-             currentPfoData.pfo_py = py;
-             currentPfoData.pfo_pz = pz;
-             currentPfoData.pfo_mass = mass;
-             currentPfoData.pfo_nHits = nHits;
-             currentPfoData.pfo_nMipLikeHits = nMipLikeHits;
-             currentPfoData.pfo_nEcalHits = nEcalHits;
-             currentPfoData.pfo_nMipEcalHits = nMipEcalHits;
-             currentPfoData.pfo_nHcalHits = nHcalHits;
-             currentPfoData.pfo_nMipHcalHits = nMipHcalHits;
-             currentPfoData.pfo_minClusterDistance = minClusterDistance;
-             currentPfoData.pfo_maxCosOpeningAngle = maxCosOpeningAngle;
-             currentPfoData.pfo_startLayer = pfoStartLayer;
-             currentPfoData.pfo_nLayers = pfoNLayers;
-             currentPfoData.pfo_fNeutral = fNeutral;
-             currentPfoData.pfo_fPhoton = fPhoton;
-             currentPfoData.pfo_fCharged = fCharged;
-             currentPfoData.pfo_alpha = 0.f;
-             currentPfoData.pfo_mcPdg = pBestMCMatch->GetParticleId();
-//             currentPfoData.pfo_mcGenStatus = reinterpret_cast<const edm4hep::MCParticle*>(pBestMCMatch->GetUid())->getGeneratorStatus();
-             currentPfoData.pfo_mcEnergy = pBestMCMatch->GetEnergy();
-             lc_content::g_pfoMonitoringBuffer.push_back(currentPfoData);
+                 pfoData.setMcPdg(pBestMCMatch->GetParticleId());
+                 pfoData.setMcEnergy(pBestMCMatch->GetEnergy());
+             }
            }
-           catch (StatusCodeException &)
+           catch (StatusCodeException &e)
            {
+               pfoData.setFNeutral(fNeutral);
+               pfoData.setFPhoton(fPhoton);
+               pfoData.setFCharged(fCharged);
+               static int errorCountNeutral = 0;
+               if (errorCountNeutral++ < 10) std::cout << "PfoMonitoring: MC match error for neutral: " << e.ToString() << std::endl;
            }
         } // neutral PFO
     }
@@ -406,7 +427,7 @@ void PfoMonitoringAlgorithm::GetMipLikeHits(const pandora::Cluster *const pClust
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 
-StatusCode PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
+pandora::StatusCode PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,

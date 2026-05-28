@@ -36,7 +36,8 @@ if(PANDORA_MONITORING)
     find_package(PandoraMonitoring 03.00.00 REQUIRED)
 endif()
 
-set(CMAKE_CXX_STANDARD 11 CACHE STRING "C++ Standard")
+# Modern PODIO and EDM4hep require at least C++17; C++20 is recommended for Gaudi 40+
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ Standard")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -pedantic -Wno-long-long -Wno-sign-compare -Wshadow -fno-strict-aliasing ${CMAKE_CXX_FLAGS}")
@@ -50,10 +51,34 @@ if(NOT COMPILER_SUPPORTS_CXX_FLAGS)
 endif()
 
 # ============================================================================
-# Collect source files
+# YAML-based code generation
+# ============================================================================
+set(PFO_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/PfoMonData.yaml)
+set(PFO_MON_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_pfo_monitoring.py)
+set(PFO_MON_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/include)
+
+# Custom command to generate PfoMonData.h and PfoMonDataCollection.h from YAML
+add_custom_command(
+    OUTPUT
+        ${PFO_MON_GENERATED_DIR}/PfoMonData.h
+        ${PFO_MON_GENERATED_DIR}/PfoMonDataCollection.h
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PFO_MON_GENERATED_DIR}
+    COMMAND python3 ${PFO_MON_GENERATOR} ${PFO_MON_YAML} ${PFO_MON_GENERATED_DIR}
+    DEPENDS ${PFO_MON_YAML} ${PFO_MON_GENERATOR}
+    COMMENT "Generating PfoMonData headers from YAML definition..."
+    VERBATIM
+)
+
+# Create a custom target to ensure generation runs before compilation
+add_custom_target(generate_pfo_mon_data DEPENDS
+    ${PFO_MON_GENERATED_DIR}/PfoMonData.h
+    ${PFO_MON_GENERATED_DIR}/PfoMonDataCollection.h
+)
+
+# ============================================================================
+# Collect source files (excluding generated headers handled by custom command)
 # ============================================================================
 file(GLOB_RECURSE PROJECT_SRCS RELATIVE ${PROJECT_SOURCE_DIR} "src/*.cc")
-file(GLOB_RECURSE headers RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "include/*.h")
 
 # Separate Gaudi module sources to avoid double compilation if they are in src/
 set(MODULE_SOURCES
@@ -71,12 +96,15 @@ add_library(${PROJECT_NAME} SHARED ${PROJECT_SRCS})
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 set(${PROJECT_NAME}_LIBRARIES ${PROJECT_NAME}::${PROJECT_NAME})
 
+# Make the library depend on the generated headers
+add_dependencies(${PROJECT_NAME} generate_pfo_mon_data)
+
 # ============================================================================
-# Set headers as public
+# Add generated include directory
 # ============================================================================
-if(headers)
-    target_sources(${PROJECT_NAME} PUBLIC FILE_SET headers TYPE HEADERS BASE_DIRS "include" FILES ${headers})
-endif()
+target_include_directories(${PROJECT_NAME} PUBLIC
+    $<BUILD_INTERFACE:${PFO_MON_GENERATED_DIR}>
+)
 
 # ============================================================================
 # Prepare External Dependencies
@@ -129,17 +157,19 @@ find_package(Gaudi REQUIRED)
 find_package(ROOT COMPONENTS RIO Tree REQUIRED)
 find_package(EDM4HEP REQUIRED)
 find_package(k4FWCore REQUIRED)
-#find_package(podio REQUIRED)
+find_package(podio REQUIRED)
+
+target_link_libraries(PfoMonitoring PUBLIC
+    Gaudi::GaudiKernel
+    k4FWCore::k4FWCore
+    podio::podio
+)
 
 gaudi_add_module(GaudiPfoMonitoring
                  SOURCES ${MODULE_SOURCES}
                  LINK Gaudi::GaudiKernel
                       ${PROJECT_NAME}
-                     # ${PANDORA_LIBS}
-                     # ${MARLIN_LIBS}
                       k4FWCore::k4FWCore
-                     # EDM4HEP::edm4hep
-                     # podio::podio
                       ROOT::RIO
                       ROOT::Tree)
 
