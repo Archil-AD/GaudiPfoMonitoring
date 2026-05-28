@@ -1,0 +1,160 @@
+#include "SavePfoMonitoringTree.h"
+#include "PfoMonitoringData.h"
+
+DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
+
+namespace GaudiPfoMonitoring
+{
+    SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string& name, ISvcLocator* svcLoc)
+    : Gaudi::Algorithm(name, svcLoc),
+    m_outputFile(nullptr),
+    m_outputTree(nullptr),
+    m_pfo_energy(),
+    m_pfo_pdg(),
+    m_pfo_fNeutral(),
+    m_pfo_fPhoton(),
+    m_pfo_fCharged(),
+    m_pfo_alpha(),
+    m_pfo_px(),
+    m_pfo_py(),
+    m_pfo_pz(),
+    m_pfo_mass(),
+    m_pfo_nHits(),
+    m_pfo_nMipLikeHits(),
+    m_pfo_nEcalHits(),
+    m_pfo_nMipEcalHits(),
+    m_pfo_nHcalHits(),
+    m_pfo_nMipHcalHits(),
+    m_pfo_minClusterDistance(),
+    m_pfo_maxCosOpeningAngle(),
+    m_pfo_startLayer(),
+    m_pfo_nLayers(),
+    m_pfo_mcPdg(),
+    m_pfo_mcGenStatus(),
+    m_pfo_mcEnergy(),
+    m_eventDataSvc("EventDataSvc", "SavePfoMonitoringTree")
+    {
+    }
+
+    SavePfoMonitoringTree::~SavePfoMonitoringTree()
+    {
+    }
+
+    StatusCode SavePfoMonitoringTree::initialize()
+    {
+      StatusCode sc = Gaudi::Algorithm::initialize();
+      if (!sc.isSuccess())  return sc;
+
+      info() << "Initializing " << name() << "..." << endmsg;
+
+        m_outputFile = TFile::Open("GaudiPfoMonitoring.root", "RECREATE");
+        if (!m_outputFile || m_outputFile->IsZombie())
+        {
+            error() << "Failed to open output ROOT file GaudiPfoMonitoring.root" << endmsg;
+            return StatusCode::FAILURE;
+        }
+
+        m_outputFile->cd();
+        m_outputTree = new TTree("events","events");
+        // Set up branches for the TTree
+        m_outputTree->Branch("pfo_energy", &m_pfo_energy);
+        m_outputTree->Branch("pfo_pdg", &m_pfo_pdg);
+        m_outputTree->Branch("pfo_fNeutral", &m_pfo_fNeutral);
+        m_outputTree->Branch("pfo_fPhoton", &m_pfo_fPhoton);
+        m_outputTree->Branch("pfo_fCharged", &m_pfo_fCharged);
+        m_outputTree->Branch("pfo_alpha", &m_pfo_alpha);
+        m_outputTree->Branch("pfo_px", &m_pfo_px);
+        m_outputTree->Branch("pfo_py", &m_pfo_py);
+        m_outputTree->Branch("pfo_pz", &m_pfo_pz);
+        m_outputTree->Branch("pfo_mass", &m_pfo_mass);
+        m_outputTree->Branch("pfo_nHits", &m_pfo_nHits);
+        m_outputTree->Branch("pfo_nMipLikeHits", &m_pfo_nMipLikeHits);
+        m_outputTree->Branch("pfo_nEcalHits", &m_pfo_nEcalHits);
+        m_outputTree->Branch("pfo_nMipEcalHits", &m_pfo_nMipEcalHits);
+        m_outputTree->Branch("pfo_nHcalHits", &m_pfo_nHcalHits);
+        m_outputTree->Branch("pfo_nMipHcalHits", &m_pfo_nMipHcalHits);
+        m_outputTree->Branch("pfo_minClusterDistance", &m_pfo_minClusterDistance);
+        m_outputTree->Branch("pfo_maxCosOpeningAngle", &m_pfo_maxCosOpeningAngle);
+        m_outputTree->Branch("pfo_startLayer", &m_pfo_startLayer);
+        m_outputTree->Branch("pfo_nLayers", &m_pfo_nLayers);
+        m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg);
+        m_outputTree->Branch("pfo_mcGenStatus", &m_pfo_mcGenStatus);
+        m_outputTree->Branch("pfo_mcEnergy", &m_pfo_mcEnergy);
+
+        info() << "Successfully initialized and opened ROOT file: GaudiPfoMonitoring.root" << endmsg;
+        return StatusCode::SUCCESS;
+    }
+
+    StatusCode SavePfoMonitoringTree::execute(const EventContext&) const {
+        m_pfo_energy.clear();
+        m_pfo_pdg.clear();
+        m_pfo_fNeutral.clear();
+        m_pfo_fPhoton.clear();
+        m_pfo_fCharged.clear();
+        m_pfo_alpha.clear();
+        m_pfo_px.clear();
+        m_pfo_py.clear();
+        m_pfo_pz.clear();
+        m_pfo_mass.clear();
+        m_pfo_nHits.clear();
+        m_pfo_nMipLikeHits.clear();
+        m_pfo_nEcalHits.clear();
+        m_pfo_nMipEcalHits.clear();
+        m_pfo_nHcalHits.clear();
+        m_pfo_nMipHcalHits.clear();
+        m_pfo_minClusterDistance.clear();
+        m_pfo_maxCosOpeningAngle.clear();
+        m_pfo_startLayer.clear();
+        m_pfo_nLayers.clear();
+        m_pfo_mcPdg.clear();
+        m_pfo_mcGenStatus.clear();
+        m_pfo_mcEnergy.clear();
+
+        // Retrieve data from the global buffer populated by PfoMonitoringAlgorithm
+        const std::vector<lc_content::PfoData>& pfoDataBuffer = lc_content::g_pfoMonitoringBuffer;
+
+        for (const auto& pfoData : pfoDataBuffer)
+        {
+            m_pfo_energy.push_back(pfoData.pfo_energy);
+            m_pfo_pdg.push_back(pfoData.pfo_pdg);
+            m_pfo_fNeutral.push_back(pfoData.pfo_fNeutral);
+            m_pfo_fPhoton.push_back(pfoData.pfo_fPhoton);
+            m_pfo_fCharged.push_back(pfoData.pfo_fCharged);
+            m_pfo_alpha.push_back(pfoData.pfo_alpha);
+            m_pfo_px.push_back(pfoData.pfo_px);
+            m_pfo_py.push_back(pfoData.pfo_py);
+            m_pfo_pz.push_back(pfoData.pfo_pz);
+            m_pfo_mass.push_back(pfoData.pfo_mass);
+            m_pfo_nHits.push_back(pfoData.pfo_nHits);
+            m_pfo_nMipLikeHits.push_back(pfoData.pfo_nMipLikeHits);
+            m_pfo_nEcalHits.push_back(pfoData.pfo_nEcalHits);
+            m_pfo_nMipEcalHits.push_back(pfoData.pfo_nMipEcalHits);
+            m_pfo_nHcalHits.push_back(pfoData.pfo_nHcalHits);
+            m_pfo_nMipHcalHits.push_back(pfoData.pfo_nMipHcalHits);
+            m_pfo_minClusterDistance.push_back(pfoData.pfo_minClusterDistance);
+            m_pfo_maxCosOpeningAngle.push_back(pfoData.pfo_maxCosOpeningAngle);
+            m_pfo_startLayer.push_back(pfoData.pfo_startLayer);
+            m_pfo_nLayers.push_back(pfoData.pfo_nLayers);
+            m_pfo_mcPdg.push_back(pfoData.pfo_mcPdg);
+            m_pfo_mcGenStatus.push_back(pfoData.pfo_mcGenStatus);
+            m_pfo_mcEnergy.push_back(pfoData.pfo_mcEnergy);
+        }
+        m_outputTree->Fill();
+
+        return StatusCode::SUCCESS;
+    }
+
+    StatusCode SavePfoMonitoringTree::finalize()
+    {
+        info() << "Finalizing " << name() << "..." << endmsg;
+
+        if (m_outputFile)
+        {
+            m_outputFile->Write();
+            m_outputFile->Close();
+            delete m_outputFile;
+            m_outputFile = nullptr;
+        }
+        return Gaudi::Algorithm::finalize();
+    }
+}
