@@ -104,7 +104,16 @@ add_dependencies(${PROJECT_NAME} generate_pfo_mon_data)
 # ============================================================================
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${PFO_MON_GENERATED_DIR}>
+
 )
+
+# ============================================================================
+# Set headers as public
+# ============================================================================
+file(GLOB_RECURSE headers RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "include/*.h")
+if(headers)
+    target_sources(${PROJECT_NAME} PUBLIC FILE_SET headers TYPE HEADERS BASE_DIRS "include" FILES ${headers})
+endif()
 
 # ============================================================================
 # Prepare External Dependencies
@@ -224,3 +233,4 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+
