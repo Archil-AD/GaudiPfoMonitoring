@@ -41,6 +41,8 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float> m_pfo_py;
         mutable std::vector<float> m_pfo_pz;
         mutable std::vector<float> m_pfo_mass;
+        mutable std::vector<unsigned int> m_pfo_nClusters;
+        mutable std::vector<unsigned int> m_pfo_nEmClusters;
         mutable std::vector<unsigned int> m_pfo_nHits;
         mutable std::vector<unsigned int> m_pfo_nMipLikeHits;
         mutable std::vector<unsigned int> m_pfo_nEcalHits;

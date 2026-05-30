@@ -20,6 +20,8 @@ namespace GaudiPfoMonitoring
     m_pfo_py(),
     m_pfo_pz(),
     m_pfo_mass(),
+    m_pfo_nClusters(),
+    m_pfo_nEmClusters(),
     m_pfo_nHits(),
     m_pfo_nMipLikeHits(),
     m_pfo_nEcalHits(),
@@ -67,6 +69,8 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("pfo_py", &m_pfo_py);
         m_outputTree->Branch("pfo_pz", &m_pfo_pz);
         m_outputTree->Branch("pfo_mass", &m_pfo_mass);
+        m_outputTree->Branch("pfo_nClusters", &m_pfo_nClusters);
+        m_outputTree->Branch("pfo_nEmClusters", &m_pfo_nEmClusters);
         m_outputTree->Branch("pfo_nHits", &m_pfo_nHits);
         m_outputTree->Branch("pfo_nMipLikeHits", &m_pfo_nMipLikeHits);
         m_outputTree->Branch("pfo_nEcalHits", &m_pfo_nEcalHits);
@@ -95,6 +99,8 @@ namespace GaudiPfoMonitoring
         m_pfo_py.clear();
         m_pfo_pz.clear();
         m_pfo_mass.clear();
+        m_pfo_nClusters.clear();
+        m_pfo_nEmClusters.clear();
         m_pfo_nHits.clear();
         m_pfo_nMipLikeHits.clear();
         m_pfo_nEcalHits.clear();
@@ -130,6 +136,8 @@ namespace GaudiPfoMonitoring
             m_pfo_py.push_back(pfoData.getPy());
             m_pfo_pz.push_back(pfoData.getPz());
             m_pfo_mass.push_back(pfoData.getMass());
+            m_pfo_nClusters.push_back(pfoData.getNClusters());
+            m_pfo_nEmClusters.push_back(pfoData.getNEmClusters());
             m_pfo_nHits.push_back(pfoData.getNHits());
             m_pfo_nMipLikeHits.push_back(pfoData.getNMipLikeHits());
             m_pfo_nEcalHits.push_back(pfoData.getNEcalHits());
