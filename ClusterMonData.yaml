@@ -1,0 +1,29 @@
+package: GaudiPfoMonitoring
+namespace: GaudiPfoMonitoring
+name: ClusterMonData
+collection_id: 1002
+members:
+  - name: energy
+    type: float
+  - name: nHits
+    type: uint32_t
+  - name: nMipLikeHits
+    type: uint32_t
+  - name: nEcalHits
+    type: uint32_t
+  - name: nHcalHits
+    type: uint32_t
+  - name: nMipEcalHits
+    type: uint32_t
+  - name: nMipHcalHits
+    type: uint32_t
+  - name: startLayer
+    type: uint32_t
+  - name: nLayers
+    type: uint32_t
+  - name: isEm
+    type: uint32_t
+  - name: minClusterDistance
+    type: float
+  - name: isInPfo
+    type: uint32_t

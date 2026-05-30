@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """
-YAML-based code generator for PfoMonData and PfoMonDataCollection.
-Reads PfoMonData.yaml and generates the corresponding C++ headers.
+YAML-based code generator for monitoring data objects and their collections.
+Reads a YAML definition file and generates the corresponding C++ headers.
+
+The YAML file must contain:
+  - namespace   : C++ namespace
+  - collection_id : unique CLID integer
+  - members     : list of {name, type} entries
+
+Optionally:
+  - name        : base class name (default: PfoMonData)
 
 Usage:
     python3 generate_pfo_monitoring.py <yaml_file> <output_dir>
@@ -26,8 +34,9 @@ TYPE_MAP = {
 def generate_data_header(config):
     ns = config['namespace']
     members = config['members']
+    class_name = config.get('name', 'PfoMonData')
+    guard = f'GAUDIPFOMONITORING_{class_name.upper()}_H'
 
-    members_lines = []
     getters = []
     setters = []
     private_members = []
@@ -67,16 +76,16 @@ def generate_data_header(config):
         private_members.insert(0, f'    uint32_t {"{0}, ".join(uint32_vars)}{{0}};')
 
     lines = []
-    lines.append(f'#ifndef GAUDIPFOMONITORING_PFOMONDATA_H')
-    lines.append(f'#define GAUDIPFOMONITORING_PFOMONDATA_H')
+    lines.append(f'#ifndef {guard}')
+    lines.append(f'#define {guard}')
     lines.append('')
     lines.append('#include <cstdint>')
     lines.append('')
     lines.append(f'namespace {ns} {{')
     lines.append('')
-    lines.append('class PfoMonData {')
+    lines.append(f'class {class_name} {{')
     lines.append('public:')
-    lines.append('    PfoMonData() = default;')
+    lines.append(f'    {class_name}() = default;')
     lines.append('')
     lines.append('    // Getters')
     for g in getters:
@@ -101,34 +110,37 @@ def generate_data_header(config):
 def generate_collection_header(config):
     ns = config['namespace']
     clid = config['collection_id']
+    class_name = config.get('name', 'PfoMonData')
+    collection_name = f'{class_name}Collection'
+    guard = f'GAUDIPFOMONITORING_{collection_name.upper()}_H'
 
     lines = []
-    lines.append(f'#ifndef GAUDIPFOMONITORING_PFOMONDATACOLLECTION_H')
-    lines.append(f'#define GAUDIPFOMONITORING_PFOMONDATACOLLECTION_H')
+    lines.append(f'#ifndef {guard}')
+    lines.append(f'#define {guard}')
     lines.append('')
     lines.append('#include "GaudiKernel/DataObject.h"')
-    lines.append('#include "PfoMonData.h"')
+    lines.append(f'#include "{class_name}.h"')
     lines.append('#include <vector>')
     lines.append('')
     lines.append(f'namespace {ns} {{')
     lines.append('')
     lines.append(f'// Unique ID for the Gaudi Event Store')
-    lines.append(f'static const CLID CLID_PfoMonDataCollection = {clid};')
+    lines.append(f'static const CLID CLID_{collection_name} = {clid};')
     lines.append('')
-    lines.append('class PfoMonDataCollection : public DataObject, public std::vector<PfoMonData> {')
+    lines.append(f'class {collection_name} : public DataObject, public std::vector<{class_name}> {{')
     lines.append('public:')
-    lines.append('    PfoMonDataCollection() = default;')
-    lines.append('    virtual ~PfoMonDataCollection() = default;')
+    lines.append(f'    {collection_name}() = default;')
+    lines.append(f'    virtual ~{collection_name}() = default;')
     lines.append('')
     lines.append('    // Mimic PODIO\'s create method')
-    lines.append('    PfoMonData& create() {')
+    lines.append(f'    {class_name}& create() {{')
     lines.append('        this->emplace_back();')
     lines.append('        return this->back();')
     lines.append('    }')
     lines.append('')
     lines.append('    // Gaudi DataObject requirements')
-    lines.append('    static const CLID& classID() {{ return CLID_PfoMonDataCollection; }}')
-    lines.append('    virtual const CLID& clID() const {{ return classID(); }}')
+    lines.append(f'    static const CLID& classID() {{ return CLID_{collection_name}; }}')
+    lines.append(f'    virtual const CLID& clID() const {{ return classID(); }}')
     lines.append('};')
     lines.append('')
     lines.append(f'}} // namespace {ns}')
@@ -149,18 +161,20 @@ def main():
     with open(yaml_file, 'r') as f:
         config = yaml.safe_load(f)
 
+    class_name = config.get('name', 'PfoMonData')
+
     os.makedirs(output_dir, exist_ok=True)
 
-    # Generate PfoMonData.h
+    # Generate {ClassName}.h
     data_header = generate_data_header(config)
-    data_path = os.path.join(output_dir, 'PfoMonData.h')
+    data_path = os.path.join(output_dir, f'{class_name}.h')
     with open(data_path, 'w') as f:
         f.write(data_header)
     print(f"Generated: {data_path}")
 
-    # Generate PfoMonDataCollection.h
+    # Generate {ClassName}Collection.h
     collection_header = generate_collection_header(config)
-    collection_path = os.path.join(output_dir, 'PfoMonDataCollection.h')
+    collection_path = os.path.join(output_dir, f'{class_name}Collection.h')
     with open(collection_path, 'w') as f:
         f.write(collection_header)
     print(f"Generated: {collection_path}")

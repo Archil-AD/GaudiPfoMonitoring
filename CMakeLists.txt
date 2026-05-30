@@ -53,11 +53,12 @@ endif()
 # ============================================================================
 # YAML-based code generation
 # ============================================================================
-set(PFO_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/PfoMonData.yaml)
 set(PFO_MON_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_pfo_monitoring.py)
 set(PFO_MON_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/include)
 
-# Custom command to generate PfoMonData.h and PfoMonDataCollection.h from YAML
+# --- PfoMonData ---
+set(PFO_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/PfoMonData.yaml)
+
 add_custom_command(
     OUTPUT
         ${PFO_MON_GENERATED_DIR}/PfoMonData.h
@@ -69,10 +70,26 @@ add_custom_command(
     VERBATIM
 )
 
+# --- ClusterMonData ---
+set(CLUSTER_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/ClusterMonData.yaml)
+
+add_custom_command(
+    OUTPUT
+        ${PFO_MON_GENERATED_DIR}/ClusterMonData.h
+        ${PFO_MON_GENERATED_DIR}/ClusterMonDataCollection.h
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PFO_MON_GENERATED_DIR}
+    COMMAND python3 ${PFO_MON_GENERATOR} ${CLUSTER_MON_YAML} ${PFO_MON_GENERATED_DIR}
+    DEPENDS ${CLUSTER_MON_YAML} ${PFO_MON_GENERATOR}
+    COMMENT "Generating ClusterMonData headers from YAML definition..."
+    VERBATIM
+)
+
 # Create a custom target to ensure generation runs before compilation
 add_custom_target(generate_pfo_mon_data DEPENDS
     ${PFO_MON_GENERATED_DIR}/PfoMonData.h
     ${PFO_MON_GENERATED_DIR}/PfoMonDataCollection.h
+    ${PFO_MON_GENERATED_DIR}/ClusterMonData.h
+    ${PFO_MON_GENERATED_DIR}/ClusterMonDataCollection.h
 )
 
 # ============================================================================

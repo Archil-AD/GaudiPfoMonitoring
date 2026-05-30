@@ -1,6 +1,7 @@
 #include "SavePfoMonitoringTree.h"
-// Include the PODIO generated collection header
+// Include the PODIO generated collection headers
 #include "PfoMonDataCollection.h"
+#include "ClusterMonDataCollection.h"
 
 DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
 
@@ -34,6 +35,18 @@ namespace GaudiPfoMonitoring
     m_pfo_nLayers(),
     m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
     m_pfo_mcEnergy(),
+    m_clus_energy(),
+    m_clus_nHits(),
+    m_clus_nMipLikeHits(),
+    m_clus_nEcalHits(),
+    m_clus_nHcalHits(),
+    m_clus_nMipEcalHits(),
+    m_clus_nMipHcalHits(),
+    m_clus_startLayer(),
+    m_clus_nLayers(),
+    m_clus_isEm(),
+    m_clus_minClusterDistance(),
+    m_clus_isInPfo(),
     m_eventDataSvc("EventDataSvc", "SavePfoMonitoringTree")
     {
     }
@@ -84,6 +97,20 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg); // Keep mcPdg branch
         m_outputTree->Branch("pfo_mcEnergy", &m_pfo_mcEnergy);
 
+        // Cluster branches (one entry per cluster in pAllClusters)
+        m_outputTree->Branch("clus_energy",      &m_clus_energy);
+        m_outputTree->Branch("clus_nHits",        &m_clus_nHits);
+        m_outputTree->Branch("clus_nMipLikeHits", &m_clus_nMipLikeHits);
+        m_outputTree->Branch("clus_nEcalHits",    &m_clus_nEcalHits);
+        m_outputTree->Branch("clus_nHcalHits",    &m_clus_nHcalHits);
+        m_outputTree->Branch("clus_nMipEcalHits", &m_clus_nMipEcalHits);
+        m_outputTree->Branch("clus_nMipHcalHits", &m_clus_nMipHcalHits);
+        m_outputTree->Branch("clus_startLayer",   &m_clus_startLayer);
+        m_outputTree->Branch("clus_nLayers",      &m_clus_nLayers);
+        m_outputTree->Branch("clus_isEm",              &m_clus_isEm);
+        m_outputTree->Branch("clus_minClusterDistance",  &m_clus_minClusterDistance);
+        m_outputTree->Branch("clus_isInPfo",             &m_clus_isInPfo);
+
         info() << "Successfully initialized and opened ROOT file: GaudiPfoMonitoring.root" << endmsg;
         return StatusCode::SUCCESS;
     }
@@ -114,7 +141,21 @@ namespace GaudiPfoMonitoring
         m_pfo_mcPdg.clear(); // Clear mcPdg
         m_pfo_mcEnergy.clear();
 
-        // Retrieve the PODIO collection from the Event Store
+        // Clear cluster vectors
+        m_clus_energy.clear();
+        m_clus_nHits.clear();
+        m_clus_nMipLikeHits.clear();
+        m_clus_nEcalHits.clear();
+        m_clus_nHcalHits.clear();
+        m_clus_nMipEcalHits.clear();
+        m_clus_nMipHcalHits.clear();
+        m_clus_startLayer.clear();
+        m_clus_nLayers.clear();
+        m_clus_isEm.clear();
+        m_clus_minClusterDistance.clear();
+        m_clus_isInPfo.clear();
+
+        // Retrieve the PFO collection from the Event Store
         const GaudiPfoMonitoring::PfoMonDataCollection* pfoDataBuffer = nullptr;
         if (eventSvc()->retrieveObject("/Event/PfoMonitoringData", (DataObject*&)pfoDataBuffer).isFailure()) {
             warning() << "PfoMonitoringData not found. Tree will have empty branches for this event." << endmsg;
@@ -124,8 +165,8 @@ namespace GaudiPfoMonitoring
 
         debug() << "Saving " << pfoDataBuffer->size() << " PFOs to Tree." << endmsg;
 
-        for (const auto& pfoData : *pfoDataBuffer) // Dereference the pointer here
-        {     
+        for (const auto& pfoData : *pfoDataBuffer)
+        {
             m_pfo_energy.push_back(pfoData.getEnergy());
             m_pfo_pdg.push_back(pfoData.getPdg());
             m_pfo_fNeutral.push_back(pfoData.getFNeutral());
@@ -151,6 +192,33 @@ namespace GaudiPfoMonitoring
             m_pfo_mcPdg.push_back(pfoData.getMcPdg());
             m_pfo_mcEnergy.push_back(pfoData.getMcEnergy());
         }
+
+        // Retrieve the cluster collection from the Event Store
+        const GaudiPfoMonitoring::ClusterMonDataCollection* clusterDataBuffer = nullptr;
+        if (eventSvc()->retrieveObject("/Event/ClusterMonitoringData", (DataObject*&)clusterDataBuffer).isSuccess())
+        {
+            debug() << "Saving " << clusterDataBuffer->size() << " clusters to Tree." << endmsg;
+            for (const auto& clusData : *clusterDataBuffer)
+            {
+                m_clus_energy.push_back(clusData.getEnergy());
+                m_clus_nHits.push_back(clusData.getNHits());
+                m_clus_nMipLikeHits.push_back(clusData.getNMipLikeHits());
+                m_clus_nEcalHits.push_back(clusData.getNEcalHits());
+                m_clus_nHcalHits.push_back(clusData.getNHcalHits());
+                m_clus_nMipEcalHits.push_back(clusData.getNMipEcalHits());
+                m_clus_nMipHcalHits.push_back(clusData.getNMipHcalHits());
+                m_clus_startLayer.push_back(clusData.getStartLayer());
+                m_clus_nLayers.push_back(clusData.getNLayers());
+                m_clus_isEm.push_back(clusData.getIsEm());
+                m_clus_minClusterDistance.push_back(clusData.getMinClusterDistance());
+                m_clus_isInPfo.push_back(clusData.getIsInPfo());
+            }
+        }
+        else
+        {
+            warning() << "ClusterMonitoringData not found for this event." << endmsg;
+        }
+
         m_outputTree->Fill();
 
         // Note: No clear() needed! Gaudi clears the Event Store automatically.
