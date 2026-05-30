@@ -57,6 +57,20 @@ namespace GaudiPfoMonitoring
         mutable std::vector<int> m_pfo_mcGenStatus;
         mutable std::vector<float> m_pfo_mcEnergy;
 
+        // Cluster branches (one entry per cluster in pAllClusters)
+        mutable std::vector<float>        m_clus_energy;
+        mutable std::vector<unsigned int> m_clus_nHits;
+        mutable std::vector<unsigned int> m_clus_nMipLikeHits;
+        mutable std::vector<unsigned int> m_clus_nEcalHits;
+        mutable std::vector<unsigned int> m_clus_nHcalHits;
+        mutable std::vector<unsigned int> m_clus_nMipEcalHits;
+        mutable std::vector<unsigned int> m_clus_nMipHcalHits;
+        mutable std::vector<unsigned int> m_clus_startLayer;
+        mutable std::vector<unsigned int> m_clus_nLayers;
+        mutable std::vector<unsigned int> m_clus_isEm;
+        mutable std::vector<float>        m_clus_minClusterDistance;
+        mutable std::vector<unsigned int> m_clus_isInPfo;
+
         ServiceHandle<IDataProviderSvc> m_eventDataSvc;
     };
 }

@@ -1,5 +1,6 @@
 package: GaudiPfoMonitoring
 namespace: GaudiPfoMonitoring
+name: PfoMonData
 collection_id: 1001
 members:
   - name: energy

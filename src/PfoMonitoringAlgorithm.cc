@@ -22,7 +22,9 @@
 #include "EVENT/MCParticle.h"
 
 #include "PfoMonDataCollection.h"
+#include "ClusterMonDataCollection.h"
 
+#include <cmath>
 #include <algorithm>
 #include <iomanip>
 #include <limits>
@@ -77,7 +79,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         return STATUS_CODE_FAILURE;
     }
 
-    // 2. Retrieve or Create the PODIO collection
+    // 2. Retrieve or Create the PFO monitoring collection
     GaudiPfoMonitoring::PfoMonDataCollection* pfoColl = nullptr;
     if (eventSvc->retrieveObject("/Event/PfoMonitoringData", (DataObject*&)pfoColl).isFailure())
     {
@@ -85,6 +87,18 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         if (eventSvc->registerObject("/Event/PfoMonitoringData", pfoColl).isFailure()) {
             std::cout << "PfoMonitoringAlgorithm: Could not register PfoMonitoringData" << std::endl;
             delete pfoColl;
+            return STATUS_CODE_FAILURE;
+        }
+    }
+
+    // 3. Retrieve or Create the cluster monitoring collection
+    GaudiPfoMonitoring::ClusterMonDataCollection* clusterColl = nullptr;
+    if (eventSvc->retrieveObject("/Event/ClusterMonitoringData", (DataObject*&)clusterColl).isFailure())
+    {
+        clusterColl = new GaudiPfoMonitoring::ClusterMonDataCollection();
+        if (eventSvc->registerObject("/Event/ClusterMonitoringData", clusterColl).isFailure()) {
+            std::cout << "PfoMonitoringAlgorithm: Could not register ClusterMonitoringData" << std::endl;
+            delete clusterColl;
             return STATUS_CODE_FAILURE;
         }
     }
@@ -108,15 +122,30 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         std::cout << "PfoMonitoringAlgorithm: Current PFO list is EMPTY." << std::endl;
     }
 
+    //--------------------------------------------------------------------------------------------------------------
+    // get all clusters
     const ClusterList *pAllClusters = NULL;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pAllClusters));
 
+    if (pAllClusters->empty()) {
+        // If this prints, your Pandora XML is calling this algorithm too early 
+        // or the "Current cluster List" is not set correctly.
+        std::cout << "PfoMonitoringAlgorithm: Current Cluster list is EMPTY." << std::endl;
+    }
+
+    //--------------------------------------------------------------------------------------------------------------
+    // Build a set of all clusters that are part of any PFO
+    ClusterList pfoClusters;
+
+    //--------------------------------------------------------------------------------------------------------------
+    // Fill PFO monitoring data from pPfoList
     for (PfoList::const_iterator pfoIter = pPfoList->begin(); pfoIter != pPfoList->end(); ++pfoIter)
     {
         const ParticleFlowObject *const pPfo = *pfoIter;
-
+       
         const TrackList &trackList(pPfo->GetTrackList());
         const ClusterList &clusterList(pPfo->GetClusterList());
+        pfoClusters.insert(pfoClusters.end(), clusterList.begin(), clusterList.end());
         const float pfoEnergy(pPfo->GetEnergy());
         const int pfoPid(pPfo->GetParticleId());
 
@@ -136,32 +165,25 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         unsigned int nMipEcalHits = 0;
         unsigned int nHcalHits = 0;
         unsigned int nMipHcalHits = 0;
-        for (const Cluster *const pCluster : clusterList)
-        {
-            if (this->GetPandora().GetPlugins()->GetParticleId()->IsEmShower(pCluster))
-            {
-                nEmClusters++;
-            }
-            nHits += pCluster->GetNCaloHits();
-            nMipLikeHits += pCluster->GetNPossibleMipHits();
-            // get ECAL/HCAL hits
-            this->GetMipLikeHits(pCluster, nEcalHits, nHcalHits, nMipEcalHits, nMipHcalHits);
 
-            if (pCluster->GetInnerPseudoLayer() < minInnerLayer)
-                minInnerLayer = pCluster->GetInnerPseudoLayer();
-
-            if (pCluster->GetOuterPseudoLayer() > maxOuterLayer)
-                maxOuterLayer = pCluster->GetOuterPseudoLayer();
-        }
-
-        const unsigned int pfoStartLayer = (clusterList.empty() ? 0 : minInnerLayer);
-        const unsigned int pfoNLayers = (clusterList.empty() ? 0 : (maxOuterLayer - minInnerLayer + 1));
-
-        float minClusterDistance = -9999.f;
+        float minClusterDistance = -9999.f; // Default minimum distance with other cluster
         float maxCosOpeningAngle = -1.f;   // Default minimum cosine
 
         for (const Cluster *const pPfoCluster : clusterList)
         {
+            if (this->GetPandora().GetPlugins()->GetParticleId()->IsEmShower(pPfoCluster))
+                nEmClusters++;
+
+            nHits += pPfoCluster->GetNCaloHits();
+            nMipLikeHits += pPfoCluster->GetNPossibleMipHits();
+            this->GetMipLikeHits(pPfoCluster, nEcalHits, nHcalHits, nMipEcalHits, nMipHcalHits);
+
+            if (pPfoCluster->GetInnerPseudoLayer() < minInnerLayer)
+                minInnerLayer = pPfoCluster->GetInnerPseudoLayer();
+
+            if (pPfoCluster->GetOuterPseudoLayer() > maxOuterLayer)
+                maxOuterLayer = pPfoCluster->GetOuterPseudoLayer();
+
 //            const CartesianVector clusterDir(pPfoCluster->GetCentroid().GetUnitVector());
 
             for (const Cluster *const pOtherCluster : *pAllClusters)
@@ -184,6 +206,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
 */
             }
         }
+
+        const unsigned int pfoStartLayer = (clusterList.empty() ? 0 : minInnerLayer);
+        const unsigned int pfoNLayers = (clusterList.empty() ? 0 : (maxOuterLayer - minInnerLayer + 1));
 
         // Create the monitoring object and fill reconstructed information first
         auto &pfoData = pfoColl->create();
@@ -221,19 +246,27 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
               const Track *const pTrack = trackList.front();
               const MCParticle *const pMCParticle(MCParticleHelper::GetMainMCParticle(pTrack));
               
-              if (pMCParticle)
-              {
-                  m_trackMcPfoTargets.push_back(pMCParticle);
+               if (pMCParticle)
+               {
+                   m_trackMcPfoTargets.push_back(pMCParticle);
 
-                  // if MC particle is pi+/-, K+/- or proton then this is a correct assignment
-                  if( std::abs(pMCParticle->GetParticleId()) == 211 ||
-                      std::abs(pMCParticle->GetParticleId()) == 321 ||
-                      std::abs(pMCParticle->GetParticleId()) == 2212) m_nCorrectChargedHadronPfo++;
-                  else m_nWrongChargedHadronPfo++; 
+                   // if MC particle is pi+/-, K+/- or proton then this is a correct assignment
+                   if( std::abs(pMCParticle->GetParticleId()) == 211 ||
+                       std::abs(pMCParticle->GetParticleId()) == 321 ||
+                       std::abs(pMCParticle->GetParticleId()) == 2212) m_nCorrectChargedHadronPfo++;
+                   else m_nWrongChargedHadronPfo++; 
 
-                  pfoData.setMcPdg(pMCParticle->GetParticleId());
-                  pfoData.setMcEnergy(pMCParticle->GetEnergy());
-              }
+                   pfoData.setMcPdg(pMCParticle->GetParticleId());
+                   pfoData.setMcEnergy(pMCParticle->GetEnergy());
+
+                   // Opening angle between PFO and MC particle
+                   const CartesianVector &mcMomentum(pMCParticle->GetMomentum());
+                   if (momentum.GetMagnitudeSquared() > std::numeric_limits<float>::epsilon() &&
+                       mcMomentum.GetMagnitudeSquared() > std::numeric_limits<float>::epsilon())
+                   {
+                       pfoData.setAlpha(std::acos(std::max(-1.f, std::min(1.f, momentum.GetCosOpeningAngle(mcMomentum)))));
+                   }
+               }
            }
            catch (StatusCodeException &e)
            {
@@ -307,6 +340,14 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
 
                  pfoData.setMcPdg(pBestMCMatch->GetParticleId());
                  pfoData.setMcEnergy(pBestMCMatch->GetEnergy());
+
+                 // Opening angle (cosine) between PFO and MC particle
+                 const CartesianVector &mcMomentum(pBestMCMatch->GetMomentum());
+                 if (momentum.GetMagnitudeSquared() > std::numeric_limits<float>::epsilon() &&
+                     mcMomentum.GetMagnitudeSquared() > std::numeric_limits<float>::epsilon())
+                 {
+                     pfoData.setAlpha(std::acos(std::max(-1.f, std::min(1.f, momentum.GetCosOpeningAngle(mcMomentum)))));
+                 }
              }
            }
            catch (StatusCodeException &e)
@@ -318,6 +359,47 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
                if (errorCountNeutral++ < 10) std::cout << "PfoMonitoring: MC match error for neutral: " << e.ToString() << std::endl;
            }
         } // neutral PFO
+    }
+    //--------------------------------------------------------------------------------------------------------------
+
+
+    //--------------------------------------------------------------------------------------------------------------
+    // Fill cluster monitoring data from pAllClusters
+    for (const Cluster *const pCluster : *pAllClusters)
+    {
+        unsigned int clusEcalHits   = 0;
+        unsigned int clusHcalHits   = 0;
+        unsigned int clusMipEcalHits = 0;
+        unsigned int clusMipHcalHits = 0;
+        this->GetMipLikeHits(pCluster, clusEcalHits, clusHcalHits, clusMipEcalHits, clusMipHcalHits);
+
+        const unsigned int clusStartLayer = pCluster->GetInnerPseudoLayer();
+        const unsigned int clusNLayers    = pCluster->GetOuterPseudoLayer() - clusStartLayer + 1;
+        const unsigned int clusIsEm       = this->GetPandora().GetPlugins()->GetParticleId()->IsEmShower(pCluster) ? 1 : 0;
+
+        float clusMinDist = -9999.f;
+        for (const Cluster *const pOtherCluster : *pAllClusters)
+        {
+            if (pCluster == pOtherCluster)
+                continue;
+            const float dist(ClusterHelper::GetDistanceToClosestHit(pCluster, pOtherCluster));
+            if (dist < std::abs(clusMinDist))
+                clusMinDist = dist;
+        }
+
+        auto &clusData = clusterColl->create();
+        clusData.setEnergy(pCluster->GetHadronicEnergy());
+        clusData.setNHits(pCluster->GetNCaloHits());
+        clusData.setNMipLikeHits(pCluster->GetNPossibleMipHits());
+        clusData.setNEcalHits(clusEcalHits);
+        clusData.setNHcalHits(clusHcalHits);
+        clusData.setNMipEcalHits(clusMipEcalHits);
+        clusData.setNMipHcalHits(clusMipHcalHits);
+        clusData.setStartLayer(clusStartLayer);
+        clusData.setNLayers(clusNLayers);
+        clusData.setIsEm(clusIsEm);
+        clusData.setMinClusterDistance(clusMinDist);
+        clusData.setIsInPfo(pfoClusters.end() != std::find(pfoClusters.begin(), pfoClusters.end(), pCluster) ? 1 : 0);
     }
     //--------------------------------------------------------------------------------------------------------------
 
