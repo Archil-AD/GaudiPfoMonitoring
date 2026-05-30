@@ -129,6 +129,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         unsigned int minInnerLayer(std::numeric_limits<unsigned int>::max());
         unsigned int maxOuterLayer(0);
 
+        unsigned int nEmClusters = 0;
         unsigned int nHits = 0;
         unsigned int nMipLikeHits = 0;
         unsigned int nEcalHits = 0;
@@ -137,6 +138,10 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         unsigned int nMipHcalHits = 0;
         for (const Cluster *const pCluster : clusterList)
         {
+            if (this->GetPandora().GetPlugins()->GetParticleId()->IsEmShower(pCluster))
+            {
+                nEmClusters++;
+            }
             nHits += pCluster->GetNCaloHits();
             nMipLikeHits += pCluster->GetNPossibleMipHits();
             // get ECAL/HCAL hits
@@ -188,6 +193,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run()
         pfoData.setPy(py);
         pfoData.setPz(pz);
         pfoData.setMass(mass);
+        pfoData.setNClusters(clusterList.size());
+        pfoData.setNEmClusters(nEmClusters);
         pfoData.setNHits(nHits);
         pfoData.setNMipLikeHits(nMipLikeHits);
         pfoData.setNEcalHits(nEcalHits);
@@ -399,9 +406,10 @@ void PfoMonitoringAlgorithm::GetMipLikeHits(const pandora::Cluster *const pClust
         for (const pandora::CaloHit *const pCaloHit : *layerEntry.second)
         {
             const pandora::HitType hitType(pCaloHit->GetHitType());
+            //const pandora::HitRegion hitRegion(pCaloHit->GetHitRegion());
 
             // Check if the hit belongs to the ECAL (Barrel or Endcap)
-            if (hitType == pandora::ECAL_BARREL || hitType == pandora::ECAL_ENDCAP)
+            if (hitType == pandora::ECAL || hitType == pandora::ECAL)
             {
                 nEcalHits++;
                 // IsPossibleMip() is the internal Pandora flag for MIP-like hits
@@ -411,7 +419,7 @@ void PfoMonitoringAlgorithm::GetMipLikeHits(const pandora::Cluster *const pClust
                 }
             }
      	    // Check if the hit belongs to the HCAL (Barrel or Endcap)
-            if (hitType == pandora::HCAL_BARREL || hitType == pandora::HCAL_ENDCAP)
+            if (hitType == pandora::HCAL || hitType == pandora::HCAL)
             {
                 nHcalHits++;
                 // IsPossibleMip() is the internal Pandora flag for MIP-like hits
