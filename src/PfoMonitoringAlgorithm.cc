@@ -32,6 +32,7 @@
 #include <cmath>
 #include <iomanip>
 #include <limits>
+#include <unordered_set>
 
 using namespace pandora;
 
@@ -245,18 +246,19 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
   //--------------------------------------------------------------------------------------------------------------
   // Build a set of all clusters that are part of any PFO
-  ClusterList pfoClusters;
+  std::unordered_set<const Cluster*> pfoClusterSet;
 
   //--------------------------------------------------------------------------------------------------------------
   // Fill PFO monitoring data from pPfoList
   for (PfoList::const_iterator pfoIter = pPfoList->begin();
        pfoIter != pPfoList->end(); ++pfoIter) {
     const ParticleFlowObject *const pPfo = *pfoIter;
+    const ClusterList &clusterList(pPfo->GetClusterList());
+    for (const Cluster* const pPfoCluster : clusterList) {
+        pfoClusterSet.insert(pPfoCluster);
+    }
 
     const TrackList &trackList(pPfo->GetTrackList());
-    const ClusterList &clusterList(pPfo->GetClusterList());
-    pfoClusters.insert(pfoClusters.end(), clusterList.begin(),
-                       clusterList.end());
     const float pfoEnergy(pPfo->GetEnergy());
     const int pfoPid(pPfo->GetParticleId());
 
@@ -557,11 +559,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       clusData.setIsEm(clusIsEm);
       clusData.setMinClusterDistance(clusMinDist);
       clusData.setDistToMostEnergeticClusterCentroid(distToMECC);
-      clusData.setIsInPfo(pfoClusters.end() != std::find(pfoClusters.begin(),
-                                                         pfoClusters.end(),
-                                                         pCluster)
-                              ? 1
-                              : 0);
+      clusData.setIsInPfo(pfoClusterSet.count(pCluster) ? 1 : 0);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
