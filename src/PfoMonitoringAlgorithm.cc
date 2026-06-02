@@ -518,6 +518,25 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
           clusMinDist = dist;
       }
       
+      // calculate energy-weighted centroid of the cluster
+      float sumWeight = 0.f;
+      float sumX = 0.f, sumY = 0.f, sumZ = 0.f;
+      CartesianVector clusterCentroid(0.f, 0.f, 0.f);
+      const OrderedCaloHitList &orderedList(pCluster->GetOrderedCaloHitList());
+      for (const auto &layerEntry : orderedList) {
+        for (const CaloHit *const pHit : *layerEntry.second) {
+          const float w(pHit->GetHadronicEnergy());
+          const CartesianVector &p(pHit->GetPositionVector());
+          sumWeight += w;
+          sumX += w * p.GetX();
+          sumY += w * p.GetY();
+          sumZ += w * p.GetZ();
+        }
+      }
+      if (sumWeight > std::numeric_limits<float>::epsilon()) {
+        clusterCentroid = CartesianVector(sumX / sumWeight, sumY / sumWeight, sumZ / sumWeight);
+      }
+
       // 3D distance from cluster centroid to energy-weighted centroid of the most energetic cluster
       const float distToMECC = hasMostEnergeticCluster
           ? (pCluster->GetCentroid() - mostEnergeticClusterCentroid).GetMagnitude()
