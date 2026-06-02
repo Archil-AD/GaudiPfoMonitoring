@@ -82,6 +82,10 @@ private:
     bool m_createCaloHitMonData;
     std::string m_isolatedCaloHitListName; ///< The name of the dedicated isolated hit list
 
+    float m_isolationCutDistanceFine2;      ///< Squared isolation cut distance for fine-granularity hits
+    float m_isolationCutDistanceCoarse2;    ///< Squared isolation cut distance for coarse-granularity hits
+    float m_isolationSearchSafetyFactor;    ///< Safety factor applied to the KD-tree search radius for isolation
+
     int m_eventNumber; ///< running event counter, incremented every Run()
 };
 

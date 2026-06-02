@@ -90,6 +90,8 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float>        m_hit_positionX;
         mutable std::vector<float>        m_hit_positionY;
         mutable std::vector<float>        m_hit_positionZ;
+        mutable std::vector<unsigned int> m_hit_type;
+        mutable std::vector<unsigned int> m_hit_isolationNearbyHits;
 
         ServiceHandle<IDataProviderSvc> m_eventDataSvc;
     };
