@@ -84,12 +84,28 @@ add_custom_command(
     VERBATIM
 )
 
+# --- EventMonData ---
+set(EVENT_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/EventMonData.yaml)
+
+add_custom_command(
+    OUTPUT
+        ${PFO_MON_GENERATED_DIR}/EventMonData.h
+        ${PFO_MON_GENERATED_DIR}/EventMonDataCollection.h
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PFO_MON_GENERATED_DIR}
+    COMMAND python3 ${PFO_MON_GENERATOR} ${EVENT_MON_YAML} ${PFO_MON_GENERATED_DIR}
+    DEPENDS ${EVENT_MON_YAML} ${PFO_MON_GENERATOR}
+    COMMENT "Generating EventMonData headers from YAML definition..."
+    VERBATIM
+)
+
 # Create a custom target to ensure generation runs before compilation
 add_custom_target(generate_pfo_mon_data DEPENDS
     ${PFO_MON_GENERATED_DIR}/PfoMonData.h
     ${PFO_MON_GENERATED_DIR}/PfoMonDataCollection.h
     ${PFO_MON_GENERATED_DIR}/ClusterMonData.h
     ${PFO_MON_GENERATED_DIR}/ClusterMonDataCollection.h
+    ${PFO_MON_GENERATED_DIR}/EventMonData.h
+    ${PFO_MON_GENERATED_DIR}/EventMonDataCollection.h
 )
 
 # ============================================================================
