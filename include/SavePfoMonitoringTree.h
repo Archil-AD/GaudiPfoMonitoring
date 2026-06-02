@@ -50,7 +50,6 @@ namespace GaudiPfoMonitoring
         mutable std::vector<unsigned int> m_pfo_nHcalHits;
         mutable std::vector<unsigned int> m_pfo_nMipHcalHits;
         mutable std::vector<float> m_pfo_minClusterDistance;
-        mutable std::vector<float> m_pfo_maxCosOpeningAngle;
         mutable std::vector<unsigned int> m_pfo_startLayer;
         mutable std::vector<unsigned int> m_pfo_nLayers;
         mutable std::vector<int> m_pfo_mcPdg;
@@ -59,7 +58,7 @@ namespace GaudiPfoMonitoring
 
         // Event-level summary (one scalar per event)
         mutable int          m_evt_eventNumber;
-        mutable unsigned int m_evt_nTotalHits;
+        mutable unsigned int m_evt_nClusteredNonIsolatedHits;
         mutable unsigned int m_evt_nClusteredIsolatedHits;
         mutable unsigned int m_evt_nOrphanIsolatedHits;
         mutable float        m_evt_orphanIsolatedEnergy;
@@ -80,6 +79,7 @@ namespace GaudiPfoMonitoring
         mutable std::vector<unsigned int> m_clus_isEm;
         mutable std::vector<float>        m_clus_minClusterDistance;
         mutable std::vector<unsigned int> m_clus_isInPfo;
+        mutable std::vector<float>        m_clus_distToMostEnergeticClusterCentroid;
 
         // CaloHit branches (one entry per calo hit)
         mutable std::vector<float>        m_hit_energy;

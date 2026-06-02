@@ -5,7 +5,7 @@ collection_id: 1003
 members:
   - name: eventNumber
     type: int32_t
-  - name: nTotalHits
+  - name: nClusteredNonIsolatedHits
     type: uint32_t
   - name: nClusteredIsolatedHits
     type: uint32_t

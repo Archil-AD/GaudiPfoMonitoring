@@ -25,5 +25,9 @@ members:
     type: uint32_t
   - name: minClusterDistance
     type: float
+  - name: maxCosOpeningAngle
+    type: float
   - name: isInPfo
     type: uint32_t
+  - name: distToMostEnergeticClusterCentroid
+    type: float

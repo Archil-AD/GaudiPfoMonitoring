@@ -41,8 +41,6 @@ members:
     type: uint32_t
   - name: minClusterDistance
     type: float
-  - name: maxCosOpeningAngle
-    type: float
   - name: startLayer
     type: uint32_t
   - name: nLayers
