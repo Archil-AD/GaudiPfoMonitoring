@@ -23,3 +23,7 @@ members:
     type: uint32_t
   - name: isolationNearbyHits
     type: uint32_t
+  - name: distToMostEnergeticClusterCentroid
+    type: float
+  - name: shortestIsolationDist
+    type: float

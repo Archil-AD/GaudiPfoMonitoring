@@ -85,6 +85,7 @@ private:
     float m_isolationCutDistanceFine2;      ///< Squared isolation cut distance for fine-granularity hits
     float m_isolationCutDistanceCoarse2;    ///< Squared isolation cut distance for coarse-granularity hits
     float m_isolationSearchSafetyFactor;    ///< Safety factor applied to the KD-tree search radius for isolation
+    unsigned int m_isolationNLayers;        ///< Number of adjacent pseudo-layers to examine for isolation
 
     int m_eventNumber; ///< running event counter, incremented every Run()
 };

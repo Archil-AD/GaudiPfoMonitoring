@@ -53,6 +53,7 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
       m_isolationCutDistanceFine2(25.f * 25.f),
       m_isolationCutDistanceCoarse2(200.f * 200.f),
       m_isolationSearchSafetyFactor(2.f),
+      m_isolationNLayers(2),
       m_eventNumber(0) {
   std::cout << " ------------------------------------------------------------ "
             << std::endl;
@@ -510,8 +511,37 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   // and from the current calo hit list (isolated orphan hits)
   if (m_createCaloHitMonData && caloHitColl) {
 
-    const CaloHitList *pAllCaloHits = nullptr;
-    (void) PandoraContentApi::GetCurrentList(*this, pAllCaloHits);
+    // Build a comprehensive set of ALL calo hits from every possible source
+    // so the KD-tree used for isolation calculations is complete.
+    // Sources:
+    //   1. Regular (non-isolated) hits already inside clusters
+    //   2. Isolated hits attached to clusters
+    //   3. Remaining hits in the current available list (unclustered, any flag)
+    //   4. Hits in the dedicated isolated calo hit list (orphan isolated hits)
+    CaloHitList allCaloHits;
+
+    // 1 & 2: Hits from clusters
+    for (const Cluster *const pCluster : *pAllClusters) {
+      const OrderedCaloHitList &orderedList(pCluster->GetOrderedCaloHitList());
+      for (const auto &layerEntry : orderedList)
+        for (const CaloHit *const pCaloHit : *layerEntry.second)
+          allCaloHits.push_back(pCaloHit);
+
+      const CaloHitList &isoHits(pCluster->GetIsolatedCaloHitList());
+      allCaloHits.insert(allCaloHits.end(), isoHits.begin(), isoHits.end());
+    }
+
+    // 3: Remaining hits in the current available list (not yet clustered)
+    const CaloHitList *pCurrentListForKD = nullptr;
+    if (PandoraContentApi::GetCurrentList(*this, pCurrentListForKD) == STATUS_CODE_SUCCESS && pCurrentListForKD)
+      allCaloHits.insert(allCaloHits.end(), pCurrentListForKD->begin(), pCurrentListForKD->end());
+
+    // 4: Dedicated isolated calo hit list (orphan isolated hits not in any cluster)
+    const CaloHitList *pIsolatedListForKD = nullptr;
+    if (!m_isolatedCaloHitListName.empty() &&
+        PandoraContentApi::GetList(*this, m_isolatedCaloHitListName, pIsolatedListForKD) == STATUS_CODE_SUCCESS
+        && pIsolatedListForKD)
+      allCaloHits.insert(allCaloHits.end(), pIsolatedListForKD->begin(), pIsolatedListForKD->end());
 
     // Initialize KDTree for efficient hit isolation calculations
     typedef KDTreeNodeInfoT<const pandora::CaloHit *, 4> HitKDNode4D;
@@ -519,15 +549,15 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
     std::vector<HitKDNode4D> hitNodes4D;
     HitKDTree4D hitsKdTree4D;
-    if (pAllCaloHits) {
-      KDTreeTesseract hitsBoundingRegion4D = fill_and_bound_4d_kd_tree(this, *pAllCaloHits, hitNodes4D, true);
+    if (!allCaloHits.empty()) {
+      KDTreeTesseract hitsBoundingRegion4D = fill_and_bound_4d_kd_tree(this, allCaloHits, hitNodes4D, true);
       hitsKdTree4D.build(hitNodes4D, hitsBoundingRegion4D);
     }
 
     // Helper function to replicate CaloHitPreparationAlgorithm::IsolationCountNearbyHits
-    auto isolationCountNearbyHits = [&](unsigned int searchLayer, const CaloHit *const pCaloHit) -> unsigned int {
-      const CartesianVector &posI(pCaloHit->GetPositionVector());
-      const float mag2I(posI.GetMagnitudeSquared());
+    auto isolationCountNearbyHits = [&](unsigned int searchLayer, const CaloHit *const pCaloHit, float &shortestIsolationDist) -> unsigned int {
+      const CartesianVector &pos(pCaloHit->GetPositionVector());
+      const float mag2(pos.GetMagnitudeSquared());
       const float isolationCutDistanceSquared((this->GetPandora().GetGeometry()->GetHitTypeGranularity(pCaloHit->GetHitType()) <= FINE) ? m_isolationCutDistanceFine2 : m_isolationCutDistanceCoarse2);
       const float maxSeparation2(1000.f * 1000.f);
 
@@ -543,15 +573,53 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         if (pCaloHit == pOtherHit)
           continue;
 
-        const CartesianVector diff(posI - pOtherHit->GetPositionVector());
+        const CartesianVector diff(pos - pOtherHit->GetPositionVector());
         if (diff.GetMagnitudeSquared() > maxSeparation2)
           continue;
 
-        if ((posI.GetCrossProduct(diff).GetMagnitudeSquared() / mag2I) < isolationCutDistanceSquared)
+        float isolationDistance = std::sqrt(pos.GetCrossProduct(diff).GetMagnitudeSquared() / mag2);
+        if (isolationDistance < shortestIsolationDist)
+          shortestIsolationDist = isolationDistance;
+        if (isolationDistance < std::sqrt(isolationCutDistanceSquared))
           ++nearbyHitsFound;
       }
       return nearbyHitsFound;
     };
+
+    // Find the most energetic cluster and compute its energy-weighted centroid
+    CartesianVector mostEnergeticClusterCentroid(0.f, 0.f, 0.f);
+    bool hasMostEnergeticCluster = false;
+    if (!pAllClusters->empty()) {
+      const Cluster *pMostEnergeticCluster = nullptr;
+      float maxClusterEnergy = -std::numeric_limits<float>::max();
+      for (const Cluster *const pCluster : *pAllClusters) {
+        const float clusterEnergy(pCluster->GetHadronicEnergy());
+        if (clusterEnergy > maxClusterEnergy) {
+          maxClusterEnergy = clusterEnergy;
+          pMostEnergeticCluster = pCluster;
+        }
+      }
+
+      if (pMostEnergeticCluster) {
+        float sumWeight = 0.f;
+        float sumX = 0.f, sumY = 0.f, sumZ = 0.f;
+        const OrderedCaloHitList &orderedList(pMostEnergeticCluster->GetOrderedCaloHitList());
+        for (const auto &layerEntry : orderedList) {
+          for (const CaloHit *const pHit : *layerEntry.second) {
+            const float w(pHit->GetHadronicEnergy());
+            const CartesianVector &p(pHit->GetPositionVector());
+            sumWeight += w;
+            sumX += w * p.GetX();
+            sumY += w * p.GetY();
+            sumZ += w * p.GetZ();
+          }
+        }
+        if (sumWeight > std::numeric_limits<float>::epsilon()) {
+          mostEnergeticClusterCentroid = CartesianVector(sumX / sumWeight, sumY / sumWeight, sumZ / sumWeight);
+          hasMostEnergeticCluster = true;
+        }
+      }
+    }
 
     // Helper lambda to fill one CaloHit entry
     auto fillHit = [&](const CaloHit *const pCaloHit, bool isIsolated) {
@@ -572,45 +640,29 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
       // Calculate isolationNearbyHits (replicating logic from CaloHitPreparationAlgorithm)
       unsigned int isolationNearbyHits = 0;
-      if (pAllCaloHits && !hitNodes4D.empty()) {
+      float shortestIsolationDist = std::numeric_limits<float>::max();
+      if (!allCaloHits.empty() && !hitNodes4D.empty()) {
         const unsigned int layerI(pCaloHit->GetPseudoLayer());
-        const unsigned int nLayers(2); // Equivalent to m_isolationNLayers in preparation algorithm
-        const unsigned int minLayer((layerI < nLayers) ? 0 : layerI - nLayers);
-        const unsigned int maxLayer(layerI + nLayers);
+        const unsigned int minLayer((layerI < m_isolationNLayers) ? 0 : layerI - m_isolationNLayers);
+        const unsigned int maxLayer(layerI + m_isolationNLayers);
 
         for (unsigned int iLayer = minLayer; iLayer <= maxLayer; ++iLayer) {
-          isolationNearbyHits += isolationCountNearbyHits(iLayer, pCaloHit);
+          isolationNearbyHits += isolationCountNearbyHits(iLayer, pCaloHit, shortestIsolationDist);
         }
       }
       hitData.setIsolationNearbyHits(isolationNearbyHits);
+      hitData.setShortestIsolationDist(shortestIsolationDist > 500000.f ? -1.f : shortestIsolationDist);
+
+      // 3D distance from hit to energy-weighted centroid of the most energetic cluster
+      const float distToMECC = hasMostEnergeticCluster
+          ? (pos - mostEnergeticClusterCentroid).GetMagnitude()
+          : -1.f;
+      hitData.setDistToMostEnergeticClusterCentroid(distToMECC);
     };
 
-    // Iterate over all clusters and collect regular + isolated hits
-    for (const Cluster *const pCluster : *pAllClusters) {
-      // Regular (non-isolated) hits stored in the ordered calo hit list
-      const OrderedCaloHitList &orderedList(pCluster->GetOrderedCaloHitList());
-      for (const auto &layerEntry : orderedList) {
-        for (const CaloHit *const pCaloHit : *layerEntry.second) {
-          fillHit(pCaloHit, false);
-        }
-      }
-
-      // Isolated hits attached to this cluster
-      const CaloHitList &isolatedHits(pCluster->GetIsolatedCaloHitList());
-      for (const CaloHit *const pCaloHit : isolatedHits) {
-        fillHit(pCaloHit, true);
-      }
-    }
-
-    // Isolated hits that are not yet in any cluster (orphans in current list)
-    const CaloHitList *pCurrentCaloHitListForHits = nullptr;
-    if (PandoraContentApi::GetCurrentList(*this, pCurrentCaloHitListForHits) == STATUS_CODE_SUCCESS
-        && pCurrentCaloHitListForHits) {
-      for (const CaloHit *const pCaloHit : *pCurrentCaloHitListForHits) {
-        if (pCaloHit->IsIsolated()) {
-          fillHit(pCaloHit, true);
-        }
-      }
+    // Iterate over all hits and fill the hitData
+    for (const CaloHit *const pCaloHit : allCaloHits) {
+        fillHit(pCaloHit, pCaloHit->IsIsolated());
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -818,6 +870,10 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "IsolationSearchSafetyFactor", m_isolationSearchSafetyFactor));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "IsolationNLayers", m_isolationNLayers));
 
   return STATUS_CODE_SUCCESS;
 }
