@@ -81,6 +81,16 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float>        m_clus_minClusterDistance;
         mutable std::vector<unsigned int> m_clus_isInPfo;
 
+        // CaloHit branches (one entry per calo hit)
+        mutable std::vector<float>        m_hit_energy;
+        mutable std::vector<unsigned int> m_hit_pseudoLayer;
+        mutable std::vector<float>        m_hit_cellLengthScale;
+        mutable std::vector<unsigned int> m_hit_isIsolated;
+        mutable std::vector<unsigned int> m_hit_isPossibleMip;
+        mutable std::vector<float>        m_hit_positionX;
+        mutable std::vector<float>        m_hit_positionY;
+        mutable std::vector<float>        m_hit_positionZ;
+
         ServiceHandle<IDataProviderSvc> m_eventDataSvc;
     };
 }

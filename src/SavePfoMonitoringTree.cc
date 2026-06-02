@@ -1,8 +1,9 @@
 #include "SavePfoMonitoringTree.h"
 // Include the PODIO generated collection headers
-#include "PfoMonDataCollection.h"
+#include "CaloHitMonDataCollection.h"
 #include "ClusterMonDataCollection.h"
 #include "EventMonDataCollection.h"
+#include "PfoMonDataCollection.h"
 
 DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
 
@@ -56,6 +57,16 @@ namespace GaudiPfoMonitoring
     m_clus_isEm(),
     m_clus_minClusterDistance(),
     m_clus_isInPfo(),
+    m_hit_energy(),
+    m_hit_pseudoLayer(),
+    m_hit_cellLengthScale(),
+    m_hit_isIsolated(),
+    m_hit_isPossibleMip(),
+    m_hit_positionX(),
+    m_hit_positionY(),
+    m_hit_positionZ(),
+    m_hit_type(),
+    m_hit_isolationNearbyHits(),
     m_eventDataSvc("EventDataSvc", "SavePfoMonitoringTree")
     {
     }
@@ -130,6 +141,18 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("clus_minClusterDistance",  &m_clus_minClusterDistance);
         m_outputTree->Branch("clus_isInPfo",             &m_clus_isInPfo);
 
+        // CaloHit branches (one entry per calo hit)
+        m_outputTree->Branch("hit_energy",         &m_hit_energy);
+        m_outputTree->Branch("hit_pseudoLayer",    &m_hit_pseudoLayer);
+        m_outputTree->Branch("hit_cellLengthScale",&m_hit_cellLengthScale);
+        m_outputTree->Branch("hit_isIsolated",     &m_hit_isIsolated);
+        m_outputTree->Branch("hit_isPossibleMip",  &m_hit_isPossibleMip);
+        m_outputTree->Branch("hit_positionX",      &m_hit_positionX);
+        m_outputTree->Branch("hit_positionY",      &m_hit_positionY);
+        m_outputTree->Branch("hit_positionZ",      &m_hit_positionZ);
+        m_outputTree->Branch("hit_type",           &m_hit_type);
+        m_outputTree->Branch("hit_isolationNearbyHits", &m_hit_isolationNearbyHits);
+
         info() << "Successfully initialized and opened ROOT file: GaudiPfoMonitoring.root" << endmsg;
         return StatusCode::SUCCESS;
     }
@@ -183,6 +206,18 @@ namespace GaudiPfoMonitoring
         m_clus_isEm.clear();
         m_clus_minClusterDistance.clear();
         m_clus_isInPfo.clear();
+
+        // Clear calo hit vectors
+        m_hit_energy.clear();
+        m_hit_pseudoLayer.clear();
+        m_hit_cellLengthScale.clear();
+        m_hit_isIsolated.clear();
+        m_hit_isPossibleMip.clear();
+        m_hit_positionX.clear();
+        m_hit_positionY.clear();
+        m_hit_positionZ.clear();
+        m_hit_type.clear();
+        m_hit_isolationNearbyHits.clear();
 
         // Retrieve the PFO collection from the Event Store
         const GaudiPfoMonitoring::PfoMonDataCollection* pfoDataBuffer = nullptr;
@@ -274,6 +309,30 @@ namespace GaudiPfoMonitoring
         else
         {
             warning() << "EventMonitoringData not found for this event." << endmsg;
+        }
+
+        // Retrieve the calo hit collection from the Event Store
+        const GaudiPfoMonitoring::CaloHitMonDataCollection* caloHitDataBuffer = nullptr;
+        if (eventSvc()->retrieveObject("/Event/CaloHitMonitoringData", (DataObject*&)caloHitDataBuffer).isSuccess())
+        {
+            debug() << "Saving " << caloHitDataBuffer->size() << " calo hits to Tree." << endmsg;
+            for (const auto& hitData : *caloHitDataBuffer)
+            {
+                m_hit_energy.push_back(hitData.getEnergy());
+                m_hit_pseudoLayer.push_back(hitData.getPseudoLayer());
+                m_hit_cellLengthScale.push_back(hitData.getCellLengthScale());
+                m_hit_isIsolated.push_back(hitData.getIsIsolated());
+                m_hit_isPossibleMip.push_back(hitData.getIsPossibleMip());
+                m_hit_positionX.push_back(hitData.getPositionX());
+                m_hit_positionY.push_back(hitData.getPositionY());
+                m_hit_positionZ.push_back(hitData.getPositionZ());
+                m_hit_type.push_back(hitData.getHitType());
+                m_hit_isolationNearbyHits.push_back(hitData.getIsolationNearbyHits());
+            }
+        }
+        else
+        {
+            warning() << "CaloHitMonitoringData not found for this event." << endmsg;
         }
 
         m_outputTree->Fill();
