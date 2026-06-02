@@ -313,7 +313,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     pfoData.setNHcalHits(nHcalHits);
     pfoData.setNMipHcalHits(nMipHcalHits);
     pfoData.setMinClusterDistance(minClusterDistance);
-    pfoData.setMaxCosOpeningAngle(maxCosOpeningAngle);
     pfoData.setStartLayer(pfoStartLayer);
     pfoData.setNLayers(pfoNLayers);
     pfoData.setAlpha(0.f);
@@ -482,6 +481,11 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         if (dist < std::abs(clusMinDist))
           clusMinDist = dist;
       }
+      
+      // 3D distance from cluster centroid to energy-weighted centroid of the most energetic cluster
+      const float distToMECC = hasMostEnergeticCluster
+          ? (pCluster->GetCentroid() - mostEnergeticClusterCentroid).GetMagnitude()
+          : -1.f;
 
       if (!clusterColl)
         continue;
@@ -497,6 +501,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       clusData.setNLayers(clusNLayers);
       clusData.setIsEm(clusIsEm);
       clusData.setMinClusterDistance(clusMinDist);
+      clusData.setDistToMostEnergeticClusterCentroid(distToMECC);
       clusData.setIsInPfo(pfoClusters.end() != std::find(pfoClusters.begin(),
                                                          pfoClusters.end(),
                                                          pCluster)
@@ -586,41 +591,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       return nearbyHitsFound;
     };
 
-    // Find the most energetic cluster and compute its energy-weighted centroid
-    CartesianVector mostEnergeticClusterCentroid(0.f, 0.f, 0.f);
-    bool hasMostEnergeticCluster = false;
-    if (!pAllClusters->empty()) {
-      const Cluster *pMostEnergeticCluster = nullptr;
-      float maxClusterEnergy = -std::numeric_limits<float>::max();
-      for (const Cluster *const pCluster : *pAllClusters) {
-        const float clusterEnergy(pCluster->GetHadronicEnergy());
-        if (clusterEnergy > maxClusterEnergy) {
-          maxClusterEnergy = clusterEnergy;
-          pMostEnergeticCluster = pCluster;
-        }
-      }
-
-      if (pMostEnergeticCluster) {
-        float sumWeight = 0.f;
-        float sumX = 0.f, sumY = 0.f, sumZ = 0.f;
-        const OrderedCaloHitList &orderedList(pMostEnergeticCluster->GetOrderedCaloHitList());
-        for (const auto &layerEntry : orderedList) {
-          for (const CaloHit *const pHit : *layerEntry.second) {
-            const float w(pHit->GetHadronicEnergy());
-            const CartesianVector &p(pHit->GetPositionVector());
-            sumWeight += w;
-            sumX += w * p.GetX();
-            sumY += w * p.GetY();
-            sumZ += w * p.GetZ();
-          }
-        }
-        if (sumWeight > std::numeric_limits<float>::epsilon()) {
-          mostEnergeticClusterCentroid = CartesianVector(sumX / sumWeight, sumY / sumWeight, sumZ / sumWeight);
-          hasMostEnergeticCluster = true;
-        }
-      }
-    }
-
     // Helper lambda to fill one CaloHit entry
     auto fillHit = [&](const CaloHit *const pCaloHit, bool isIsolated) {
       const CartesianVector &pos(pCaloHit->GetPositionVector());
@@ -705,11 +675,10 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       }
     }
 
-    unsigned int nTotalIsolatedHits = nClusteredIsolatedHits + nOrphanIsolatedHits;
-
     auto &evtData = eventColl->create();
     evtData.setEventNumber(m_eventNumber++);
-    evtData.setNTotalHits(nClusteredHits + nUnclusteredNonIsolatedHits + nTotalIsolatedHits);
+    const unsigned int nClusteredNonIsolatedHits(nClusteredHits - nClusteredIsolatedHits);
+    evtData.setNClusteredNonIsolatedHits(nClusteredNonIsolatedHits);
     evtData.setNClusteredIsolatedHits(nClusteredIsolatedHits);
     evtData.setNOrphanIsolatedHits(nOrphanIsolatedHits);
     evtData.setOrphanIsolatedEnergy(orphanIsolatedEnergy);

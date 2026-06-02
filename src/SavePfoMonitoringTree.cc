@@ -38,7 +38,7 @@ namespace GaudiPfoMonitoring
     m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
     m_pfo_mcEnergy(),
     m_evt_eventNumber(0),
-    m_evt_nTotalHits(0),
+    m_evt_nClusteredNonIsolatedHits(0),
     m_evt_nClusteredIsolatedHits(0),
     m_evt_nOrphanIsolatedHits(0),
     m_evt_orphanIsolatedEnergy(0.f),
@@ -57,6 +57,7 @@ namespace GaudiPfoMonitoring
     m_clus_isEm(),
     m_clus_minClusterDistance(),
     m_clus_isInPfo(),
+    m_clus_distToMostEnergeticClusterCentroid(),
     m_hit_energy(),
     m_hit_pseudoLayer(),
     m_hit_cellLengthScale(),
@@ -95,7 +96,7 @@ namespace GaudiPfoMonitoring
         m_outputTree = new TTree("events","events");
         // Event-level summary branches (one scalar per event)
         m_outputTree->Branch("evt_eventNumber",   &m_evt_eventNumber,   "evt_eventNumber/I");
-        m_outputTree->Branch("evt_nTotalHits",    &m_evt_nTotalHits,    "evt_nTotalHits/i");
+        m_outputTree->Branch("evt_nClusteredNonIsolatedHits", &m_evt_nClusteredNonIsolatedHits, "evt_nClusteredNonIsolatedHits/i");
         m_outputTree->Branch("evt_nClusteredIsolatedHits", &m_evt_nClusteredIsolatedHits, "evt_nClusteredIsolatedHits/i");
         m_outputTree->Branch("evt_nOrphanIsolatedHits", &m_evt_nOrphanIsolatedHits, "evt_nOrphanIsolatedHits/i");
         m_outputTree->Branch("evt_orphanIsolatedEnergy", &m_evt_orphanIsolatedEnergy, "evt_orphanIsolatedEnergy/F");
@@ -142,6 +143,7 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("clus_isEm",              &m_clus_isEm);
         m_outputTree->Branch("clus_minClusterDistance",  &m_clus_minClusterDistance);
         m_outputTree->Branch("clus_isInPfo",             &m_clus_isInPfo);
+        m_outputTree->Branch("clus_distToMostEnergeticClusterCentroid", &m_clus_distToMostEnergeticClusterCentroid);
 
         // CaloHit branches (one entry per calo hit)
         m_outputTree->Branch("hit_energy",         &m_hit_energy);
@@ -189,7 +191,7 @@ namespace GaudiPfoMonitoring
 
         // Reset event-level scalars
         m_evt_eventNumber   = 0;
-        m_evt_nTotalHits    = 0;
+        m_evt_nClusteredNonIsolatedHits = 0;
         m_evt_nClusteredIsolatedHits = 0;
         m_evt_nOrphanIsolatedHits = 0;
         m_evt_orphanIsolatedEnergy = 0.f;
@@ -209,6 +211,7 @@ namespace GaudiPfoMonitoring
         m_clus_nLayers.clear();
         m_clus_isEm.clear();
         m_clus_minClusterDistance.clear();
+        m_clus_distToMostEnergeticClusterCentroid.clear();
         m_clus_isInPfo.clear();
 
         // Clear calo hit vectors
@@ -256,7 +259,6 @@ namespace GaudiPfoMonitoring
             m_pfo_nHcalHits.push_back(pfoData.getNHcalHits());
             m_pfo_nMipHcalHits.push_back(pfoData.getNMipHcalHits());
             m_pfo_minClusterDistance.push_back(pfoData.getMinClusterDistance());
-            m_pfo_maxCosOpeningAngle.push_back(pfoData.getMaxCosOpeningAngle());
             m_pfo_startLayer.push_back(pfoData.getStartLayer());
             m_pfo_nLayers.push_back(pfoData.getNLayers());
             m_pfo_mcPdg.push_back(pfoData.getMcPdg());
@@ -282,6 +284,7 @@ namespace GaudiPfoMonitoring
                 m_clus_isEm.push_back(clusData.getIsEm());
                 m_clus_minClusterDistance.push_back(clusData.getMinClusterDistance());
                 m_clus_isInPfo.push_back(clusData.getIsInPfo());
+                m_clus_distToMostEnergeticClusterCentroid.push_back(clusData.getDistToMostEnergeticClusterCentroid());
             }
         }
         else
@@ -296,7 +299,7 @@ namespace GaudiPfoMonitoring
         {
             const auto& evtData = eventDataBuffer->front();
             m_evt_eventNumber   = evtData.getEventNumber();
-            m_evt_nTotalHits    = evtData.getNTotalHits();
+            m_evt_nClusteredNonIsolatedHits = evtData.getNClusteredNonIsolatedHits();
             m_evt_nClusteredIsolatedHits = evtData.getNClusteredIsolatedHits();
             m_evt_nOrphanIsolatedHits = evtData.getNOrphanIsolatedHits();
             m_evt_orphanIsolatedEnergy = evtData.getOrphanIsolatedEnergy();
@@ -304,7 +307,7 @@ namespace GaudiPfoMonitoring
             m_evt_nClusters     = evtData.getNClusters();
             m_evt_nPFOs         = evtData.getNPFOs();
             debug() << "Event summary: event=" << m_evt_eventNumber
-                    << " totalHits=" << m_evt_nTotalHits
+                    << " clusteredNonIsolatedHits=" << m_evt_nClusteredNonIsolatedHits
                     << " clusteredIsolatedHits=" << m_evt_nClusteredIsolatedHits
                     << " orphanIsolatedHits=" << m_evt_nOrphanIsolatedHits
                     << " orphanIsolatedEnergy=" << m_evt_orphanIsolatedEnergy
