@@ -2,6 +2,7 @@
 // Include the PODIO generated collection headers
 #include "PfoMonDataCollection.h"
 #include "ClusterMonDataCollection.h"
+#include "EventMonDataCollection.h"
 
 DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
 
@@ -35,6 +36,14 @@ namespace GaudiPfoMonitoring
     m_pfo_nLayers(),
     m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
     m_pfo_mcEnergy(),
+    m_evt_eventNumber(0),
+    m_evt_nTotalHits(0),
+    m_evt_nClusteredIsolatedHits(0),
+    m_evt_nOrphanIsolatedHits(0),
+    m_evt_orphanIsolatedEnergy(0.f),
+    m_evt_nUnclusteredNonIsolatedHits(0),
+    m_evt_nClusters(0),
+    m_evt_nPFOs(0),
     m_clus_energy(),
     m_clus_nHits(),
     m_clus_nMipLikeHits(),
@@ -97,6 +106,16 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg); // Keep mcPdg branch
         m_outputTree->Branch("pfo_mcEnergy", &m_pfo_mcEnergy);
 
+        // Event-level summary branches (one scalar per event)
+        m_outputTree->Branch("evt_eventNumber",   &m_evt_eventNumber,   "evt_eventNumber/I");
+        m_outputTree->Branch("evt_nTotalHits",    &m_evt_nTotalHits,    "evt_nTotalHits/i");
+        m_outputTree->Branch("evt_nClusteredIsolatedHits", &m_evt_nClusteredIsolatedHits, "evt_nClusteredIsolatedHits/i");
+        m_outputTree->Branch("evt_nOrphanIsolatedHits", &m_evt_nOrphanIsolatedHits, "evt_nOrphanIsolatedHits/i");
+        m_outputTree->Branch("evt_orphanIsolatedEnergy", &m_evt_orphanIsolatedEnergy, "evt_orphanIsolatedEnergy/F");
+        m_outputTree->Branch("evt_nUnclusteredNonIsolatedHits", &m_evt_nUnclusteredNonIsolatedHits, "evt_nUnclusteredNonIsolatedHits/i");
+        m_outputTree->Branch("evt_nClusters",     &m_evt_nClusters,     "evt_nClusters/i");
+        m_outputTree->Branch("evt_nPFOs",         &m_evt_nPFOs,         "evt_nPFOs/i");
+
         // Cluster branches (one entry per cluster in pAllClusters)
         m_outputTree->Branch("clus_energy",      &m_clus_energy);
         m_outputTree->Branch("clus_nHits",        &m_clus_nHits);
@@ -140,6 +159,16 @@ namespace GaudiPfoMonitoring
         m_pfo_nLayers.clear();
         m_pfo_mcPdg.clear(); // Clear mcPdg
         m_pfo_mcEnergy.clear();
+
+        // Reset event-level scalars
+        m_evt_eventNumber   = 0;
+        m_evt_nTotalHits    = 0;
+        m_evt_nClusteredIsolatedHits = 0;
+        m_evt_nOrphanIsolatedHits = 0;
+        m_evt_orphanIsolatedEnergy = 0.f;
+        m_evt_nUnclusteredNonIsolatedHits = 0;
+        m_evt_nClusters     = 0;
+        m_evt_nPFOs         = 0;
 
         // Clear cluster vectors
         m_clus_energy.clear();
@@ -217,6 +246,34 @@ namespace GaudiPfoMonitoring
         else
         {
             warning() << "ClusterMonitoringData not found for this event." << endmsg;
+        }
+
+        // Retrieve the event-level summary from the Event Store
+        const GaudiPfoMonitoring::EventMonDataCollection* eventDataBuffer = nullptr;
+        if (eventSvc()->retrieveObject("/Event/EventMonitoringData", (DataObject*&)eventDataBuffer).isSuccess()
+            && !eventDataBuffer->empty())
+        {
+            const auto& evtData = eventDataBuffer->front();
+            m_evt_eventNumber   = evtData.getEventNumber();
+            m_evt_nTotalHits    = evtData.getNTotalHits();
+            m_evt_nClusteredIsolatedHits = evtData.getNClusteredIsolatedHits();
+            m_evt_nOrphanIsolatedHits = evtData.getNOrphanIsolatedHits();
+            m_evt_orphanIsolatedEnergy = evtData.getOrphanIsolatedEnergy();
+            m_evt_nUnclusteredNonIsolatedHits = evtData.getNUnclusteredNonIsolatedHits();
+            m_evt_nClusters     = evtData.getNClusters();
+            m_evt_nPFOs         = evtData.getNPFOs();
+            debug() << "Event summary: event=" << m_evt_eventNumber
+                    << " totalHits=" << m_evt_nTotalHits
+                    << " clusteredIsolatedHits=" << m_evt_nClusteredIsolatedHits
+                    << " orphanIsolatedHits=" << m_evt_nOrphanIsolatedHits
+                    << " orphanIsolatedEnergy=" << m_evt_orphanIsolatedEnergy
+                    << " unclusteredNonIsolatedHits=" << m_evt_nUnclusteredNonIsolatedHits
+                    << " clusters=" << m_evt_nClusters
+                    << " PFOs=" << m_evt_nPFOs << endmsg;
+        }
+        else
+        {
+            warning() << "EventMonitoringData not found for this event." << endmsg;
         }
 
         m_outputTree->Fill();

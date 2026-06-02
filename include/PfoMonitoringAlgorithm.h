@@ -12,6 +12,7 @@
 #include "Api/PandoraApi.h"
 
 #include <TFile.h>
+#include <string>
 #include <TTree.h>
 #include <vector>
 
@@ -74,6 +75,13 @@ private:
     unsigned int m_nCorrectChargedHadronPfo;
     unsigned int m_nWrongChargedHadronPfo;
     float m_neutralHadronEnergyFractionCut;
+
+    bool m_createPfoMonData;
+    bool m_createClusterMonData;
+    bool m_createEventMonData;
+    std::string m_isolatedCaloHitListName; ///< The name of the dedicated isolated hit list
+
+    int m_eventNumber; ///< running event counter, incremented every Run()
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,21 @@
+package: GaudiPfoMonitoring
+namespace: GaudiPfoMonitoring
+name: EventMonData
+collection_id: 1003
+members:
+  - name: eventNumber
+    type: int32_t
+  - name: nTotalHits
+    type: uint32_t
+  - name: nClusteredIsolatedHits
+    type: uint32_t
+  - name: nOrphanIsolatedHits
+    type: uint32_t
+  - name: orphanIsolatedEnergy
+    type: float
+  - name: nUnclusteredNonIsolatedHits
+    type: uint32_t
+  - name: nClusters
+    type: uint32_t
+  - name: nPFOs
+    type: uint32_t
