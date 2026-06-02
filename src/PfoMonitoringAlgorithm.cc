@@ -212,8 +212,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   // Find the most energetic cluster and compute its energy-weighted centroid
   CartesianVector mostEnergeticClusterCentroid(0.f, 0.f, 0.f);
   bool hasMostEnergeticCluster = false;
+  const Cluster *pMostEnergeticCluster = nullptr;
   if (!pAllClusters->empty()) {
-    const Cluster *pMostEnergeticCluster = nullptr;
     float maxClusterEnergy = -std::numeric_limits<float>::max();
     for (const Cluster *const pCluster : *pAllClusters) {
       const float clusterEnergy(pCluster->GetHadronicEnergy());
@@ -280,7 +280,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     unsigned int nMipHcalHits = 0;
 
     float minClusterDistance =
-        -9999.f; // Default minimum distance with other cluster
+        -1.f; // Default minimum distance with most energetic cluster
     float maxCosOpeningAngle = -1.f; // Default minimum cosine
 
     for (const Cluster *const pPfoCluster : clusterList) {
@@ -299,9 +299,13 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       if (pPfoCluster->GetOuterPseudoLayer() > maxOuterLayer)
         maxOuterLayer = pPfoCluster->GetOuterPseudoLayer();
 
+
+      if( hasMostEnergeticCluster &&  pMostEnergeticCluster!=pPfoCluster )
+        minClusterDistance =  ClusterHelper::GetDistanceToClosestHit(pPfoCluster, pMostEnergeticCluster);
+
+      /*
       //            const CartesianVector
       //            clusterDir(pPfoCluster->GetCentroid().GetUnitVector());
-
       for (const Cluster *const pOtherCluster : *pAllClusters) {
         // Skip clusters that are already part of this PFO
         if (clusterList.end() !=
@@ -312,7 +316,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
             ClusterHelper::GetDistanceToClosestHit(pPfoCluster, pOtherCluster));
         if (distance < std::abs(minClusterDistance))
           minClusterDistance = distance;
-        /*
                         const CartesianVector
            displacement(pOtherCluster->GetCentroid() -
            pPfoCluster->GetCentroid()); if (displacement.GetMagnitudeSquared() >
@@ -323,8 +326,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
            (cosOpeningAngle > maxCosOpeningAngle) maxCosOpeningAngle =
            cosOpeningAngle;
                         }
-        */
       }
+      */
     }
 
     const unsigned int pfoStartLayer =
@@ -510,16 +513,11 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
               ? 1
               : 0;
 
-      float clusMinDist = -9999.f;
-      for (const Cluster *const pOtherCluster : *pAllClusters) {
-        if (pCluster == pOtherCluster)
-          continue;
-        const float dist(
-            ClusterHelper::GetDistanceToClosestHit(pCluster, pOtherCluster));
-        if (dist < std::abs(clusMinDist))
-          clusMinDist = dist;
-      }
-      
+      // minimum distance with most energetic cluster
+      float clusMinDist = -1.f;
+      if( hasMostEnergeticCluster &&  pMostEnergeticCluster!=pCluster )
+        clusMinDist =  ClusterHelper::GetDistanceToClosestHit(pCluster, pMostEnergeticCluster);
+
       // calculate energy-weighted centroid of the cluster
       float sumWeight = 0.f;
       float sumX = 0.f, sumY = 0.f, sumZ = 0.f;
