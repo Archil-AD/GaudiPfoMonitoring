@@ -539,7 +539,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
       // 3D distance from cluster centroid to energy-weighted centroid of the most energetic cluster
       const float distToMECC = hasMostEnergeticCluster
-          ? (pCluster->GetCentroid() - mostEnergeticClusterCentroid).GetMagnitude()
+          ? (clusterCentroid - mostEnergeticClusterCentroid).GetMagnitude()
           : -1.f;
 
       if (!clusterColl)
