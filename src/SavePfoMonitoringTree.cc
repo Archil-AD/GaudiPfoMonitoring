@@ -67,6 +67,8 @@ namespace GaudiPfoMonitoring
     m_hit_positionZ(),
     m_hit_type(),
     m_hit_isolationNearbyHits(),
+    m_hit_distToMostEnergeticClusterCentroid(),
+    m_hit_shortestIsolationDist(),
     m_eventDataSvc("EventDataSvc", "SavePfoMonitoringTree")
     {
     }
@@ -91,7 +93,17 @@ namespace GaudiPfoMonitoring
 
         m_outputFile->cd();
         m_outputTree = new TTree("events","events");
-        // Set up branches for the TTree
+        // Event-level summary branches (one scalar per event)
+        m_outputTree->Branch("evt_eventNumber",   &m_evt_eventNumber,   "evt_eventNumber/I");
+        m_outputTree->Branch("evt_nTotalHits",    &m_evt_nTotalHits,    "evt_nTotalHits/i");
+        m_outputTree->Branch("evt_nClusteredIsolatedHits", &m_evt_nClusteredIsolatedHits, "evt_nClusteredIsolatedHits/i");
+        m_outputTree->Branch("evt_nOrphanIsolatedHits", &m_evt_nOrphanIsolatedHits, "evt_nOrphanIsolatedHits/i");
+        m_outputTree->Branch("evt_orphanIsolatedEnergy", &m_evt_orphanIsolatedEnergy, "evt_orphanIsolatedEnergy/F");
+        m_outputTree->Branch("evt_nUnclusteredNonIsolatedHits", &m_evt_nUnclusteredNonIsolatedHits, "evt_nUnclusteredNonIsolatedHits/i");
+        m_outputTree->Branch("evt_nClusters",     &m_evt_nClusters,     "evt_nClusters/i");
+        m_outputTree->Branch("evt_nPFOs",         &m_evt_nPFOs,         "evt_nPFOs/i");
+
+        // Set up PFO branches
         m_outputTree->Branch("pfo_energy", &m_pfo_energy);
         m_outputTree->Branch("pfo_pdg", &m_pfo_pdg);
         m_outputTree->Branch("pfo_fNeutral", &m_pfo_fNeutral);
@@ -116,16 +128,6 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("pfo_nLayers", &m_pfo_nLayers);
         m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg); // Keep mcPdg branch
         m_outputTree->Branch("pfo_mcEnergy", &m_pfo_mcEnergy);
-
-        // Event-level summary branches (one scalar per event)
-        m_outputTree->Branch("evt_eventNumber",   &m_evt_eventNumber,   "evt_eventNumber/I");
-        m_outputTree->Branch("evt_nTotalHits",    &m_evt_nTotalHits,    "evt_nTotalHits/i");
-        m_outputTree->Branch("evt_nClusteredIsolatedHits", &m_evt_nClusteredIsolatedHits, "evt_nClusteredIsolatedHits/i");
-        m_outputTree->Branch("evt_nOrphanIsolatedHits", &m_evt_nOrphanIsolatedHits, "evt_nOrphanIsolatedHits/i");
-        m_outputTree->Branch("evt_orphanIsolatedEnergy", &m_evt_orphanIsolatedEnergy, "evt_orphanIsolatedEnergy/F");
-        m_outputTree->Branch("evt_nUnclusteredNonIsolatedHits", &m_evt_nUnclusteredNonIsolatedHits, "evt_nUnclusteredNonIsolatedHits/i");
-        m_outputTree->Branch("evt_nClusters",     &m_evt_nClusters,     "evt_nClusters/i");
-        m_outputTree->Branch("evt_nPFOs",         &m_evt_nPFOs,         "evt_nPFOs/i");
 
         // Cluster branches (one entry per cluster in pAllClusters)
         m_outputTree->Branch("clus_energy",      &m_clus_energy);
@@ -152,6 +154,8 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("hit_positionZ",      &m_hit_positionZ);
         m_outputTree->Branch("hit_type",           &m_hit_type);
         m_outputTree->Branch("hit_isolationNearbyHits", &m_hit_isolationNearbyHits);
+        m_outputTree->Branch("hit_distToMostEnergeticClusterCentroid", &m_hit_distToMostEnergeticClusterCentroid);
+        m_outputTree->Branch("hit_shortestIsolationDist", &m_hit_shortestIsolationDist);
 
         info() << "Successfully initialized and opened ROOT file: GaudiPfoMonitoring.root" << endmsg;
         return StatusCode::SUCCESS;
@@ -218,6 +222,8 @@ namespace GaudiPfoMonitoring
         m_hit_positionZ.clear();
         m_hit_type.clear();
         m_hit_isolationNearbyHits.clear();
+        m_hit_distToMostEnergeticClusterCentroid.clear();
+        m_hit_shortestIsolationDist.clear();
 
         // Retrieve the PFO collection from the Event Store
         const GaudiPfoMonitoring::PfoMonDataCollection* pfoDataBuffer = nullptr;
@@ -328,6 +334,8 @@ namespace GaudiPfoMonitoring
                 m_hit_positionZ.push_back(hitData.getPositionZ());
                 m_hit_type.push_back(hitData.getHitType());
                 m_hit_isolationNearbyHits.push_back(hitData.getIsolationNearbyHits());
+                m_hit_distToMostEnergeticClusterCentroid.push_back(hitData.getDistToMostEnergeticClusterCentroid());
+                m_hit_shortestIsolationDist.push_back(hitData.getShortestIsolationDist());
             }
         }
         else
