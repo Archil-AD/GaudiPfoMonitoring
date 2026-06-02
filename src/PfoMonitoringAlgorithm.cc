@@ -208,6 +208,42 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   }
 
   //--------------------------------------------------------------------------------------------------------------
+  // Find the most energetic cluster and compute its energy-weighted centroid
+  CartesianVector mostEnergeticClusterCentroid(0.f, 0.f, 0.f);
+  bool hasMostEnergeticCluster = false;
+  if (!pAllClusters->empty()) {
+    const Cluster *pMostEnergeticCluster = nullptr;
+    float maxClusterEnergy = -std::numeric_limits<float>::max();
+    for (const Cluster *const pCluster : *pAllClusters) {
+      const float clusterEnergy(pCluster->GetHadronicEnergy());
+      if (clusterEnergy > maxClusterEnergy) {
+        maxClusterEnergy = clusterEnergy;
+        pMostEnergeticCluster = pCluster;
+      }
+    }
+
+    if (pMostEnergeticCluster) {
+      float sumWeight = 0.f;
+      float sumX = 0.f, sumY = 0.f, sumZ = 0.f;
+      const OrderedCaloHitList &orderedList(pMostEnergeticCluster->GetOrderedCaloHitList());
+      for (const auto &layerEntry : orderedList) {
+        for (const CaloHit *const pHit : *layerEntry.second) {
+          const float w(pHit->GetHadronicEnergy());
+          const CartesianVector &p(pHit->GetPositionVector());
+          sumWeight += w;
+          sumX += w * p.GetX();
+          sumY += w * p.GetY();
+          sumZ += w * p.GetZ();
+        }
+      }
+      if (sumWeight > std::numeric_limits<float>::epsilon()) {
+        mostEnergeticClusterCentroid = CartesianVector(sumX / sumWeight, sumY / sumWeight, sumZ / sumWeight);
+        hasMostEnergeticCluster = true;
+      }
+    }
+  }
+
+  //--------------------------------------------------------------------------------------------------------------
   // Build a set of all clusters that are part of any PFO
   ClusterList pfoClusters;
 
