@@ -17,10 +17,13 @@
 #include "LCHelpers/ClusterHelper.h"
 #include "LCHelpers/ReclusterHelper.h"
 #include "LCHelpers/SortingHelper.h"
+#include "LCUtility/KDTreeLinkerAlgoT.h"
+#include "LCUtility/KDTreeLinkerToolsT.h"
 #include "PfoMonitoringAlgorithm.h"
 
 #include "EVENT/MCParticle.h"
 
+#include "CaloHitMonDataCollection.h"
 #include "ClusterMonDataCollection.h"
 #include "EventMonDataCollection.h"
 #include "PfoMonDataCollection.h"
@@ -44,8 +47,12 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
     : m_nCorrectNeutralHadronPfo(0), m_nWrongNeutralHadronPfo(0),
       m_nCorrectChargedHadronPfo(0), m_nWrongChargedHadronPfo(0),
       m_neutralHadronEnergyFractionCut(0.7), m_createPfoMonData(true),
-      m_createClusterMonData(true), m_createEventMonData(true), 
+      m_createClusterMonData(true), m_createEventMonData(true),
+      m_createCaloHitMonData(true),
       m_isolatedCaloHitListName("IsolatedCaloHitList"),
+      m_isolationCutDistanceFine2(25.f * 25.f),
+      m_isolationCutDistanceCoarse2(200.f * 200.f),
+      m_isolationSearchSafetyFactor(2.f),
       m_eventNumber(0) {
   std::cout << " ------------------------------------------------------------ "
             << std::endl;
@@ -124,7 +131,26 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     }
   }
 
-  // 4. Retrieve or Create the event-level monitoring collection
+  // 4. Retrieve or Create the CaloHit monitoring collection
+  GaudiPfoMonitoring::CaloHitMonDataCollection *caloHitColl = nullptr;
+  if (m_createCaloHitMonData) {
+    if (eventSvc
+            ->retrieveObject("/Event/CaloHitMonitoringData",
+                             (DataObject *&)caloHitColl)
+            .isFailure()) {
+      caloHitColl = new GaudiPfoMonitoring::CaloHitMonDataCollection();
+      if (eventSvc->registerObject("/Event/CaloHitMonitoringData", caloHitColl)
+              .isFailure()) {
+        std::cout << "PfoMonitoringAlgorithm: Could not register "
+                     "CaloHitMonitoringData"
+                  << std::endl;
+        delete caloHitColl;
+        return STATUS_CODE_FAILURE;
+      }
+    }
+  }
+
+  // 5. Retrieve or Create the event-level monitoring collection
   GaudiPfoMonitoring::EventMonDataCollection *eventColl = nullptr;
   if (m_createEventMonData) {
     if (eventSvc
@@ -480,6 +506,116 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   //--------------------------------------------------------------------------------------------------------------
 
   //--------------------------------------------------------------------------------------------------------------
+  // Fill calo hit monitoring data from all clusters (regular + isolated hits)
+  // and from the current calo hit list (isolated orphan hits)
+  if (m_createCaloHitMonData && caloHitColl) {
+
+    const CaloHitList *pAllCaloHits = nullptr;
+    (void) PandoraContentApi::GetCurrentList(*this, pAllCaloHits);
+
+    // Initialize KDTree for efficient hit isolation calculations
+    typedef KDTreeNodeInfoT<const pandora::CaloHit *, 4> HitKDNode4D;
+    typedef KDTreeLinkerAlgo<const pandora::CaloHit *, 4> HitKDTree4D;
+
+    std::vector<HitKDNode4D> hitNodes4D;
+    HitKDTree4D hitsKdTree4D;
+    if (pAllCaloHits) {
+      KDTreeTesseract hitsBoundingRegion4D = fill_and_bound_4d_kd_tree(this, *pAllCaloHits, hitNodes4D, true);
+      hitsKdTree4D.build(hitNodes4D, hitsBoundingRegion4D);
+    }
+
+    // Helper function to replicate CaloHitPreparationAlgorithm::IsolationCountNearbyHits
+    auto isolationCountNearbyHits = [&](unsigned int searchLayer, const CaloHit *const pCaloHit) -> unsigned int {
+      const CartesianVector &posI(pCaloHit->GetPositionVector());
+      const float mag2I(posI.GetMagnitudeSquared());
+      const float isolationCutDistanceSquared((this->GetPandora().GetGeometry()->GetHitTypeGranularity(pCaloHit->GetHitType()) <= FINE) ? m_isolationCutDistanceFine2 : m_isolationCutDistanceCoarse2);
+      const float maxSeparation2(1000.f * 1000.f);
+
+      unsigned int nearbyHitsFound = 0;
+      const float searchDistance(m_isolationSearchSafetyFactor * std::sqrt(isolationCutDistanceSquared));
+      KDTreeTesseract searchRegionHits = build_4d_kd_search_region(pCaloHit, searchDistance, searchDistance, searchDistance, static_cast<float>(searchLayer));
+
+      std::vector<HitKDNode4D> found;
+      hitsKdTree4D.search(searchRegionHits, found);
+
+      for (const auto &hitNode : found) {
+        const CaloHit *const pOtherHit = hitNode.data;
+        if (pCaloHit == pOtherHit)
+          continue;
+
+        const CartesianVector diff(posI - pOtherHit->GetPositionVector());
+        if (diff.GetMagnitudeSquared() > maxSeparation2)
+          continue;
+
+        if ((posI.GetCrossProduct(diff).GetMagnitudeSquared() / mag2I) < isolationCutDistanceSquared)
+          ++nearbyHitsFound;
+      }
+      return nearbyHitsFound;
+    };
+
+    // Helper lambda to fill one CaloHit entry
+    auto fillHit = [&](const CaloHit *const pCaloHit, bool isIsolated) {
+      const CartesianVector &pos(pCaloHit->GetPositionVector());
+      auto &hitData = caloHitColl->create();
+      hitData.setEnergy(pCaloHit->GetInputEnergy());
+      hitData.setPseudoLayer(static_cast<uint32_t>(pCaloHit->GetPseudoLayer()));
+      hitData.setCellLengthScale(pCaloHit->GetCellLengthScale());
+      hitData.setIsIsolated(isIsolated ? 1u : 0u);
+      hitData.setIsPossibleMip(pCaloHit->IsPossibleMip() ? 1u : 0u);
+      hitData.setPositionX(pos.GetX());
+      hitData.setPositionY(pos.GetY());
+      hitData.setPositionZ(pos.GetZ());
+
+      const pandora::HitType hitType(pCaloHit->GetHitType());
+      // Map: 0 for ECAL, 1 for HCAL, 2 for others
+      hitData.setHitType((hitType == pandora::ECAL) ? 0u : (hitType == pandora::HCAL ? 1u : 2u));
+
+      // Calculate isolationNearbyHits (replicating logic from CaloHitPreparationAlgorithm)
+      unsigned int isolationNearbyHits = 0;
+      if (pAllCaloHits && !hitNodes4D.empty()) {
+        const unsigned int layerI(pCaloHit->GetPseudoLayer());
+        const unsigned int nLayers(2); // Equivalent to m_isolationNLayers in preparation algorithm
+        const unsigned int minLayer((layerI < nLayers) ? 0 : layerI - nLayers);
+        const unsigned int maxLayer(layerI + nLayers);
+
+        for (unsigned int iLayer = minLayer; iLayer <= maxLayer; ++iLayer) {
+          isolationNearbyHits += isolationCountNearbyHits(iLayer, pCaloHit);
+        }
+      }
+      hitData.setIsolationNearbyHits(isolationNearbyHits);
+    };
+
+    // Iterate over all clusters and collect regular + isolated hits
+    for (const Cluster *const pCluster : *pAllClusters) {
+      // Regular (non-isolated) hits stored in the ordered calo hit list
+      const OrderedCaloHitList &orderedList(pCluster->GetOrderedCaloHitList());
+      for (const auto &layerEntry : orderedList) {
+        for (const CaloHit *const pCaloHit : *layerEntry.second) {
+          fillHit(pCaloHit, false);
+        }
+      }
+
+      // Isolated hits attached to this cluster
+      const CaloHitList &isolatedHits(pCluster->GetIsolatedCaloHitList());
+      for (const CaloHit *const pCaloHit : isolatedHits) {
+        fillHit(pCaloHit, true);
+      }
+    }
+
+    // Isolated hits that are not yet in any cluster (orphans in current list)
+    const CaloHitList *pCurrentCaloHitListForHits = nullptr;
+    if (PandoraContentApi::GetCurrentList(*this, pCurrentCaloHitListForHits) == STATUS_CODE_SUCCESS
+        && pCurrentCaloHitListForHits) {
+      for (const CaloHit *const pCaloHit : *pCurrentCaloHitListForHits) {
+        if (pCaloHit->IsIsolated()) {
+          fillHit(pCaloHit, true);
+        }
+      }
+    }
+  }
+  //--------------------------------------------------------------------------------------------------------------
+
+  //--------------------------------------------------------------------------------------------------------------
   // Fill event-level monitoring data
   if (m_createEventMonData && eventColl) {
     // Count hits already inside clusters (regular and isolated)
@@ -660,7 +796,28 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
 
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "CreateCaloHitMonData",
+                           m_createCaloHitMonData));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "IsolatedCaloHitListName", m_isolatedCaloHitListName));
+
+  float isolationCutDistanceFine(std::sqrt(m_isolationCutDistanceFine2));
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "IsolationCutDistanceFine", isolationCutDistanceFine));
+  m_isolationCutDistanceFine2 = isolationCutDistanceFine * isolationCutDistanceFine;
+
+  float isolationCutDistanceCoarse(std::sqrt(m_isolationCutDistanceCoarse2));
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "IsolationCutDistanceCoarse", isolationCutDistanceCoarse));
+  m_isolationCutDistanceCoarse2 = isolationCutDistanceCoarse * isolationCutDistanceCoarse;
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "IsolationSearchSafetyFactor", m_isolationSearchSafetyFactor));
 
   return STATUS_CODE_SUCCESS;
 }

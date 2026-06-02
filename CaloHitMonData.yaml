@@ -1,0 +1,25 @@
+package: GaudiPfoMonitoring
+namespace: GaudiPfoMonitoring
+name: CaloHitMonData
+collection_id: 1004
+members:
+  - name: energy
+    type: float
+  - name: pseudoLayer
+    type: uint32_t
+  - name: cellLengthScale
+    type: float
+  - name: isIsolated
+    type: uint32_t
+  - name: isPossibleMip
+    type: uint32_t
+  - name: positionX
+    type: float
+  - name: positionY
+    type: float
+  - name: positionZ
+    type: float
+  - name: hitType
+    type: uint32_t
+  - name: isolationNearbyHits
+    type: uint32_t

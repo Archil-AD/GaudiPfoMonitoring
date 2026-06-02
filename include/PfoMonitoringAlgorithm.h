@@ -79,6 +79,7 @@ private:
     bool m_createPfoMonData;
     bool m_createClusterMonData;
     bool m_createEventMonData;
+    bool m_createCaloHitMonData;
     std::string m_isolatedCaloHitListName; ///< The name of the dedicated isolated hit list
 
     int m_eventNumber; ///< running event counter, incremented every Run()
