@@ -32,7 +32,6 @@ namespace GaudiPfoMonitoring
     m_pfo_nHcalHits(),
     m_pfo_nMipHcalHits(),
     m_pfo_minClusterDistance(),
-    m_pfo_maxCosOpeningAngle(),
     m_pfo_startLayer(),
     m_pfo_nLayers(),
     m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
@@ -124,7 +123,6 @@ namespace GaudiPfoMonitoring
         m_outputTree->Branch("pfo_nHcalHits", &m_pfo_nHcalHits);
         m_outputTree->Branch("pfo_nMipHcalHits", &m_pfo_nMipHcalHits);
         m_outputTree->Branch("pfo_minClusterDistance", &m_pfo_minClusterDistance);
-        m_outputTree->Branch("pfo_maxCosOpeningAngle", &m_pfo_maxCosOpeningAngle);
         m_outputTree->Branch("pfo_startLayer", &m_pfo_startLayer);
         m_outputTree->Branch("pfo_nLayers", &m_pfo_nLayers);
         m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg); // Keep mcPdg branch
@@ -183,7 +181,6 @@ namespace GaudiPfoMonitoring
         m_pfo_nHcalHits.clear();
         m_pfo_nMipHcalHits.clear();
         m_pfo_minClusterDistance.clear();
-        m_pfo_maxCosOpeningAngle.clear();
         m_pfo_startLayer.clear();
         m_pfo_nLayers.clear();
         m_pfo_mcPdg.clear(); // Clear mcPdg
