@@ -27,7 +27,9 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_clus_nEcalHits(), m_clus_nHcalHits(), m_clus_nMipEcalHits(),
       m_clus_nMipHcalHits(), m_clus_startLayer(), m_clus_nLayers(),
       m_clus_isEm(), m_clus_minClusterDistance(), m_clus_isInPfo(),
-      m_clus_distToMostEnergeticClusterCentroid(), m_hit_energy(),
+      m_clus_distToMostEnergeticClusterCentroid(),
+      m_clus_minInnerLayerSeparation(), m_clus_minGenericDistance(),
+      m_clus_minParallelDistance(), m_hit_energy(),
       m_hit_pseudoLayer(), m_hit_cellLengthScale(), m_hit_isIsolated(),
       m_clus_mcPdg(), m_clus_mcEnergy(), m_hit_isPossibleMip(),
       m_hit_positionX(), m_hit_positionY(),
@@ -114,6 +116,9 @@ StatusCode SavePfoMonitoringTree::initialize() {
                        &m_clus_distToMostEnergeticClusterCentroid);
   m_outputTree->Branch("clus_mcPdg", &m_clus_mcPdg);
   m_outputTree->Branch("clus_mcEnergy", &m_clus_mcEnergy);
+  m_outputTree->Branch("clus_minInnerLayerSeparation", &m_clus_minInnerLayerSeparation);
+  m_outputTree->Branch("clus_minGenericDistance", &m_clus_minGenericDistance);
+  m_outputTree->Branch("clus_minParallelDistance", &m_clus_minParallelDistance);
 
   // CaloHit branches (one entry per calo hit)
   m_outputTree->Branch("hit_energy", &m_hit_energy);
@@ -188,6 +193,9 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_isInPfo.clear();
   m_clus_mcPdg.clear();
   m_clus_mcEnergy.clear();
+  m_clus_minInnerLayerSeparation.clear();
+  m_clus_minGenericDistance.clear();
+  m_clus_minParallelDistance.clear();
 
   // Clear calo hit vectors
   m_hit_energy.clear();
@@ -269,6 +277,9 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
           clusData.getDistToMostEnergeticClusterCentroid());
       m_clus_mcPdg.push_back(clusData.getMcPdg());
       m_clus_mcEnergy.push_back(clusData.getMcEnergy());
+      m_clus_minInnerLayerSeparation.push_back(clusData.getMinInnerLayerSeparation());
+      m_clus_minGenericDistance.push_back(clusData.getMinGenericDistance());
+      m_clus_minParallelDistance.push_back(clusData.getMinParallelDistance());
     }
   } else {
     warning() << "ClusterMonitoringData not found for this event." << endmsg;
