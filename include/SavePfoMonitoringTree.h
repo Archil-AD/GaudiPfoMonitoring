@@ -80,6 +80,8 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float>        m_clus_minClusterDistance;
         mutable std::vector<unsigned int> m_clus_isInPfo;
         mutable std::vector<float>        m_clus_distToMostEnergeticClusterCentroid;
+        mutable std::vector<int>          m_clus_mcPdg;
+        mutable std::vector<float>        m_clus_mcEnergy;
 
         // CaloHit branches (one entry per calo hit)
         mutable std::vector<float>        m_hit_energy;

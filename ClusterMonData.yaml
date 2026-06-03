@@ -31,3 +31,7 @@ members:
     type: uint32_t
   - name: distToMostEnergeticClusterCentroid
     type: float
+  - name: mcPdg
+    type: int32_t
+  - name: mcEnergy
+    type: float

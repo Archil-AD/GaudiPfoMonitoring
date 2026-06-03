@@ -68,6 +68,24 @@ private:
      void GetMipLikeHits(const pandora::Cluster *const pCluster, unsigned int &nEcalHits, unsigned int &nHcalHits,
                           unsigned int &nMipEcalHits, unsigned int &nMipHcalHits) const;
 
+    /**
+     *  @brief  GetClusterMCParticleInfo
+     *
+     *  @param  pCluster
+     *
+     *  @return the best matched MC particle
+     */
+    const pandora::MCParticle* GetClusterMCParticleInfo(const pandora::Cluster *const pCluster) const;
+
+    /**
+     *  @brief  GetBestMCParticleMatch
+     *
+     *  @param  mcParticleContributions
+     *
+     *  @return the best matched MC particle
+     */
+    const pandora::MCParticle* GetBestMCParticleMatch(const MCParticleToFloatMap &mcParticleContributions) const;
+
     pandora::MCParticleList m_trackMcPfoTargets;
 
     unsigned int m_nCorrectNeutralHadronPfo;

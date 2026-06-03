@@ -446,21 +446,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         pfoData.setFPhoton(fPhoton);
         pfoData.setFCharged(fCharged);
 
-        // Find mc particle with largest associated energy in the given PFO
-        const MCParticle *pBestMCMatch(NULL);
-        float maximumEnergy(0.f);
-        MCParticleList mcParticleList;
-        for (const auto &mapEntry : mcParticleContributions)
-          mcParticleList.push_back(mapEntry.first);
-        mcParticleList.sort(PointerLessThan<MCParticle>());
-
-        for (const MCParticle *const pMCParticle : mcParticleList) {
-          const float energy(mcParticleContributions.at(pMCParticle));
-          if (energy > maximumEnergy) {
-            maximumEnergy = energy;
-            pBestMCMatch = pMCParticle;
-          }
-        }
+        const MCParticle *const pBestMCMatch = this->GetBestMCParticleMatch(mcParticleContributions);
 
         if (pBestMCMatch) {
           if (fNeutral > m_neutralHadronEnergyFractionCut)
@@ -558,6 +544,10 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       clusData.setMinClusterDistance(clusMinDist);
       clusData.setDistToMostEnergeticClusterCentroid(distToMECC);
       clusData.setIsInPfo(pfoClusterSet.count(pCluster) ? 1 : 0);
+
+      const MCParticle *const pBestMCMatch = this->GetClusterMCParticleInfo(pCluster);
+      clusData.setMcPdg(pBestMCMatch ? pBestMCMatch->GetParticleId() : 0);
+      clusData.setMcEnergy(pBestMCMatch ? pBestMCMatch->GetEnergy() : 0.f);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -840,6 +830,43 @@ void PfoMonitoringAlgorithm::GetMipLikeHits(
       }
     }
   }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+const MCParticle* PfoMonitoringAlgorithm::GetBestMCParticleMatch(const MCParticleToFloatMap &mcParticleContributions) const
+{
+    const MCParticle *pBestMCMatch(nullptr);
+    float maximumEnergy(0.f);
+
+    MCParticleList mcParticleList;
+    for (const auto &mapEntry : mcParticleContributions)
+        mcParticleList.push_back(mapEntry.first);
+
+    mcParticleList.sort(PointerLessThan<MCParticle>());
+
+    for (const MCParticle *const pMCParticle : mcParticleList)
+    {
+        const float energy(mcParticleContributions.at(pMCParticle));
+        if (energy > maximumEnergy)
+        {
+            maximumEnergy = energy;
+            pBestMCMatch = pMCParticle;
+        }
+    }
+
+    return pBestMCMatch;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+const MCParticle* PfoMonitoringAlgorithm::GetClusterMCParticleInfo(const Cluster *const pCluster) const
+{
+    float fCharged(0.f), fPhoton(0.f), fNeutral(0.f);
+    MCParticleToFloatMap mcParticleContributions;
+    this->ClusterEnergyFractions(pCluster, fCharged, fPhoton, fNeutral, mcParticleContributions);
+
+    return this->GetBestMCParticleMatch(mcParticleContributions);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

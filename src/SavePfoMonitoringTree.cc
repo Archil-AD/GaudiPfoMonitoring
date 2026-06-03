@@ -18,6 +18,7 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_pfo_nMipEcalHits(), m_pfo_nHcalHits(), m_pfo_nMipHcalHits(),
       m_pfo_minClusterDistance(), m_pfo_startLayer(), m_pfo_nLayers(),
       m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
+      m_pfo_mcGenStatus(),
       m_pfo_mcEnergy(), m_evt_eventNumber(0),
       m_evt_nClusteredNonIsolatedHits(0), m_evt_nClusteredIsolatedHits(0),
       m_evt_nOrphanIsolatedHits(0), m_evt_orphanIsolatedEnergy(0.f),
@@ -28,7 +29,8 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_clus_isEm(), m_clus_minClusterDistance(), m_clus_isInPfo(),
       m_clus_distToMostEnergeticClusterCentroid(), m_hit_energy(),
       m_hit_pseudoLayer(), m_hit_cellLengthScale(), m_hit_isIsolated(),
-      m_hit_isPossibleMip(), m_hit_positionX(), m_hit_positionY(),
+      m_clus_mcPdg(), m_clus_mcEnergy(), m_hit_isPossibleMip(),
+      m_hit_positionX(), m_hit_positionY(),
       m_hit_positionZ(), m_hit_type(), m_hit_isolationNearbyHits(),
       m_hit_distToMostEnergeticClusterCentroid(), m_hit_shortestIsolationDist(),
       m_eventDataSvc("EventDataSvc", "SavePfoMonitoringTree") {}
@@ -110,6 +112,8 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_isInPfo", &m_clus_isInPfo);
   m_outputTree->Branch("clus_distToMostEnergeticClusterCentroid",
                        &m_clus_distToMostEnergeticClusterCentroid);
+  m_outputTree->Branch("clus_mcPdg", &m_clus_mcPdg);
+  m_outputTree->Branch("clus_mcEnergy", &m_clus_mcEnergy);
 
   // CaloHit branches (one entry per calo hit)
   m_outputTree->Branch("hit_energy", &m_hit_energy);
@@ -182,6 +186,8 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_minClusterDistance.clear();
   m_clus_distToMostEnergeticClusterCentroid.clear();
   m_clus_isInPfo.clear();
+  m_clus_mcPdg.clear();
+  m_clus_mcEnergy.clear();
 
   // Clear calo hit vectors
   m_hit_energy.clear();
@@ -261,6 +267,8 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_isInPfo.push_back(clusData.getIsInPfo());
       m_clus_distToMostEnergeticClusterCentroid.push_back(
           clusData.getDistToMostEnergeticClusterCentroid());
+      m_clus_mcPdg.push_back(clusData.getMcPdg());
+      m_clus_mcEnergy.push_back(clusData.getMcEnergy());
     }
   } else {
     warning() << "ClusterMonitoringData not found for this event." << endmsg;
