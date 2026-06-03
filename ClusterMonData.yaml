@@ -35,3 +35,9 @@ members:
     type: int32_t
   - name: mcEnergy
     type: float
+  - name: minInnerLayerSeparation
+    type: float
+  - name: minGenericDistance
+    type: float
+  - name: minParallelDistance
+    type: float

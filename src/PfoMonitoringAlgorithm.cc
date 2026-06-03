@@ -528,6 +528,67 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
           ? (clusterCentroid - mostEnergeticClusterCentroid).GetMagnitude()
           : -1.f;
 
+      // ---------------------------------------------------------------
+      // Quantities mirroring ProximityBasedMergingAlgorithm cuts:
+      //   minInnerLayerSeparation  -- m_maxInnerLayerSeparation
+      //   minGenericDistance       -- m_maxGenericDistance  (perpendicular)
+      //   minParallelDistance      -- m_maxParallelDistance (parallel gate)
+      // Calculated specifically with respect to the most energetic cluster.
+      // ---------------------------------------------------------------
+      float clusMinInnerLayerSep = -1.f;
+      float clusMinGenericDist   = -1.f;
+      float clusMinParallelDist  = -1.f;
+
+      if (hasMostEnergeticCluster && pMostEnergeticCluster != pCluster) {
+        const CartesianVector thisInnerCentroid(
+            pCluster->GetCentroid(pCluster->GetInnerPseudoLayer()));
+        // In the context of GetGenericDistanceBetweenClusters, pMostEnergeticCluster is the parent and pCluster is the daughter.
+        const OrderedCaloHitList &orderedCaloHitListParent(pMostEnergeticCluster->GetOrderedCaloHitList());
+        const OrderedCaloHitList &orderedCaloHitListDaughter(pCluster->GetOrderedCaloHitList());
+
+        // --- inner-layer separation ---
+        const CartesianVector otherInnerCentroid(
+            pMostEnergeticCluster->GetCentroid(pMostEnergeticCluster->GetInnerPseudoLayer()));
+        clusMinInnerLayerSep = (thisInnerCentroid - otherInnerCentroid).GetMagnitude();
+
+        // --- generic (perpendicular) distance and associated parallel distance ---
+        const unsigned int nAdjacentLayers = 2; // NOTE: this is the default value in the ProximityBasedMerginAlgorithm
+
+        for (const auto &layerEntryP : orderedCaloHitListParent) { // Loop over hits in the parent cluster (pMostEnergeticCluster)
+          const unsigned int iLayer = layerEntryP.first;
+
+          for (const CaloHit *const pHitP : *layerEntryP.second) {
+            const CartesianVector &posP(pHitP->GetPositionVector());
+            const CartesianVector &dirP(pHitP->GetExpectedDirection());
+
+            const unsigned int firstExam(
+                (iLayer > nAdjacentLayers) ? iLayer - nAdjacentLayers : 0);
+            const unsigned int lastExam(iLayer + nAdjacentLayers);
+
+            for (unsigned int iExam = firstExam; iExam <= lastExam; ++iExam) {
+              OrderedCaloHitList::const_iterator iterD =
+                  orderedCaloHitListDaughter.find(iExam); // Compare with hits in the daughter cluster (pCluster)
+              if (orderedCaloHitListDaughter.end() == iterD)
+                continue;
+
+              for (const CaloHit *const pHitD : *iterD->second) {
+                const CartesianVector diff(posP - pHitD->GetPositionVector());
+                const float perpDist(
+                    (dirP.GetCrossProduct(diff)).GetMagnitude());
+                const float paraDist(
+                    std::fabs(dirP.GetDotProduct(diff)));
+
+                if (clusMinGenericDist < 0.f ||
+                    perpDist < clusMinGenericDist) {
+                  clusMinGenericDist  = perpDist;
+                  clusMinParallelDist = paraDist;
+                }
+              }
+            }
+          }
+        }
+      }
+
       if (!clusterColl)
         continue;
       auto &clusData = clusterColl->create();
@@ -548,6 +609,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       const MCParticle *const pBestMCMatch = this->GetClusterMCParticleInfo(pCluster);
       clusData.setMcPdg(pBestMCMatch ? pBestMCMatch->GetParticleId() : 0);
       clusData.setMcEnergy(pBestMCMatch ? pBestMCMatch->GetEnergy() : 0.f);
+      clusData.setMinInnerLayerSeparation(clusMinInnerLayerSep);
+      clusData.setMinGenericDistance(clusMinGenericDist);
+      clusData.setMinParallelDistance(clusMinParallelDist);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
