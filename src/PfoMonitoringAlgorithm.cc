@@ -248,6 +248,17 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   // Build a set of all clusters that are part of any PFO
   std::unordered_set<const Cluster*> pfoClusterSet;
 
+  // Build a set of all hits that are part of any cluster to determine availability
+  std::unordered_set<const CaloHit*> clusteredHitSet;
+  for (const Cluster *const pCluster : *pAllClusters) {
+    const OrderedCaloHitList &orderedList(pCluster->GetOrderedCaloHitList());
+    for (const auto &layerEntry : orderedList) {
+      for (const CaloHit *const pHit : *layerEntry.second) {
+        clusteredHitSet.insert(pHit);
+      }
+    }
+  }
+
   //--------------------------------------------------------------------------------------------------------------
   // Fill PFO monitoring data from pPfoList
   for (PfoList::const_iterator pfoIter = pPfoList->begin();
@@ -626,32 +637,12 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     // Sources:
     //   1. Regular (non-isolated) hits already inside clusters
     //   2. Isolated hits attached to clusters
-    //   3. Remaining hits in the current available list (unclustered, any flag)
-    //   4. Hits in the dedicated isolated calo hit list (orphan isolated hits)
+    //   3. Unclustered hits
     CaloHitList allCaloHits;
 
-    // 1 & 2: Hits from clusters
-    for (const Cluster *const pCluster : *pAllClusters) {
-      const OrderedCaloHitList &orderedList(pCluster->GetOrderedCaloHitList());
-      for (const auto &layerEntry : orderedList)
-        for (const CaloHit *const pCaloHit : *layerEntry.second)
-          allCaloHits.push_back(pCaloHit);
-
-      const CaloHitList &isoHits(pCluster->GetIsolatedCaloHitList());
-      allCaloHits.insert(allCaloHits.end(), isoHits.begin(), isoHits.end());
-    }
-
-    // 3: Remaining hits in the current available list (not yet clustered)
     const CaloHitList *pCurrentListForKD = nullptr;
     if (PandoraContentApi::GetCurrentList(*this, pCurrentListForKD) == STATUS_CODE_SUCCESS && pCurrentListForKD)
       allCaloHits.insert(allCaloHits.end(), pCurrentListForKD->begin(), pCurrentListForKD->end());
-
-    // 4: Dedicated isolated calo hit list (orphan isolated hits not in any cluster)
-    const CaloHitList *pIsolatedListForKD = nullptr;
-    if (!m_isolatedCaloHitListName.empty() &&
-        PandoraContentApi::GetList(*this, m_isolatedCaloHitListName, pIsolatedListForKD) == STATUS_CODE_SUCCESS
-        && pIsolatedListForKD)
-      allCaloHits.insert(allCaloHits.end(), pIsolatedListForKD->begin(), pIsolatedListForKD->end());
 
     // Initialize KDTree for efficient hit isolation calculations
     typedef KDTreeNodeInfoT<const pandora::CaloHit *, 4> HitKDNode4D;
@@ -745,49 +736,70 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   //--------------------------------------------------------------------------------------------------------------
   // Fill event-level monitoring data
   if (m_createEventMonData && eventColl) {
-    // Count hits already inside clusters (regular and isolated)
-    unsigned int nClusteredHits = 0;
-    unsigned int nClusteredIsolatedHits = 0;
-    for (const Cluster *const pCluster : *pAllClusters) {
-      nClusteredHits += pCluster->GetNCaloHits();
-      nClusteredIsolatedHits += pCluster->GetNIsolatedCaloHits();
-    }
-
-    // Count "orphan" isolated hits (those not in clusters)
-    unsigned int nOrphanIsolatedHits = 0;
-    float orphanIsolatedEnergy = 0.f;
-
-    // 1. Hits from the dedicated isolated calo hit list
-    const CaloHitList *pIsolatedCaloHitList = nullptr;
-    if (!m_isolatedCaloHitListName.empty() &&
-        PandoraContentApi::GetList(*this, m_isolatedCaloHitListName, pIsolatedCaloHitList) == STATUS_CODE_SUCCESS) {
-      nOrphanIsolatedHits += static_cast<unsigned int>(pIsolatedCaloHitList->size());
-      for (const CaloHit *const pCaloHit : *pIsolatedCaloHitList)
-        orphanIsolatedEnergy += pCaloHit->GetHadronicEnergy();
-    }
-
-    // 2. Hits still in the current list that are marked as isolated
-    const CaloHitList *pCurrentCaloHitList = nullptr;
+    // Count hits
+    unsigned int nClusteredNonIsolatedHits = 0;
     unsigned int nUnclusteredNonIsolatedHits = 0;
+    unsigned int nClusteredIsolatedHits = 0;
+    unsigned int nUnclusteredIsolatedHits = 0;
+    
+    // unclustered isolated hits energy
+    float unclusteredIsolatedEnergy = 0.f;
+    // unclustered non-isolated hits energy
+    float unclusteredNonIsolatedEnergy = 0.f;
+    // clustered isolated hits energy
+    float clusteredIsolatedEnergy = 0.f;
+    // clustered non-isolated hits energy
+    float clusteredNonIsolatedEnergy = 0.f;
+    // total hits energy
+    float totalEnergy = 0.f;
+
+
+    // all CaloHits
+    const CaloHitList *pCurrentCaloHitList = nullptr;
     if (PandoraContentApi::GetCurrentList(*this, pCurrentCaloHitList) == STATUS_CODE_SUCCESS && pCurrentCaloHitList) {
       for (const CaloHit *const pCaloHit : *pCurrentCaloHitList) {
-        if (pCaloHit->IsIsolated()) {
-          nOrphanIsolatedHits++;
-          orphanIsolatedEnergy += pCaloHit->GetHadronicEnergy();
-        } else {
-          nUnclusteredNonIsolatedHits++;
-        }
+          // isolated hits
+          if(pCaloHit->IsIsolated() && clusteredHitSet.count(pCaloHit)) // clustered
+          {
+             nClusteredIsolatedHits++;
+             clusteredIsolatedEnergy += pCaloHit->GetInputEnergy();
+             totalEnergy += pCaloHit->GetInputEnergy();
+          }
+          else if(pCaloHit->IsIsolated()) // unclustered
+          {
+             nUnclusteredIsolatedHits++;
+             unclusteredIsolatedEnergy += pCaloHit->GetInputEnergy();
+             totalEnergy += pCaloHit->GetInputEnergy();
+          }
+
+          // non-isolated hits
+          if(!pCaloHit->IsIsolated() && clusteredHitSet.count(pCaloHit)) // clusterd 
+          {
+             nClusteredNonIsolatedHits++;
+             clusteredNonIsolatedEnergy += pCaloHit->GetInputEnergy();
+             totalEnergy += pCaloHit->GetInputEnergy();
+          }
+          else if(!pCaloHit->IsIsolated()) // unclustered
+          {
+             nUnclusteredNonIsolatedHits++;
+             unclusteredNonIsolatedEnergy += pCaloHit->GetInputEnergy();
+             totalEnergy += pCaloHit->GetInputEnergy();
+          }
       }
     }
 
+
     auto &evtData = eventColl->create();
     evtData.setEventNumber(m_eventNumber++);
-    const unsigned int nClusteredNonIsolatedHits(nClusteredHits - nClusteredIsolatedHits);
     evtData.setNClusteredNonIsolatedHits(nClusteredNonIsolatedHits);
     evtData.setNClusteredIsolatedHits(nClusteredIsolatedHits);
-    evtData.setNOrphanIsolatedHits(nOrphanIsolatedHits);
-    evtData.setOrphanIsolatedEnergy(orphanIsolatedEnergy);
+    evtData.setNUnclusteredIsolatedHits(nUnclusteredIsolatedHits);
     evtData.setNUnclusteredNonIsolatedHits(nUnclusteredNonIsolatedHits);
+    evtData.setClusteredIsolatedEnergy(clusteredIsolatedEnergy);
+    evtData.setClusteredNonIsolatedEnergy(clusteredNonIsolatedEnergy);
+    evtData.setUnclusteredIsolatedEnergy(unclusteredIsolatedEnergy);
+    evtData.setUnclusteredNonIsolatedEnergy(unclusteredNonIsolatedEnergy);
+    evtData.setTotalEnergy(totalEnergy);
     evtData.setNClusters(static_cast<unsigned int>(pAllClusters->size()));
     evtData.setNPFOs(static_cast<unsigned int>(pPfoList->size()));
   }

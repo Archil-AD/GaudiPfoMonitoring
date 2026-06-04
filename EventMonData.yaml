@@ -9,12 +9,20 @@ members:
     type: uint32_t
   - name: nClusteredIsolatedHits
     type: uint32_t
-  - name: nOrphanIsolatedHits
+  - name: nUnclusteredIsolatedHits
     type: uint32_t
-  - name: orphanIsolatedEnergy
-    type: float
   - name: nUnclusteredNonIsolatedHits
     type: uint32_t
+  - name: clusteredIsolatedEnergy
+    type: float
+  - name: clusteredNonIsolatedEnergy
+    type: float
+  - name: unclusteredIsolatedEnergy
+    type: float
+  - name: unclusteredNonIsolatedEnergy
+    type: float
+  - name: totalEnergy
+    type: float
   - name: nClusters
     type: uint32_t
   - name: nPFOs
