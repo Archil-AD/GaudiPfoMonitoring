@@ -21,6 +21,10 @@
 #include "LCUtility/KDTreeLinkerToolsT.h"
 #include "PfoMonitoringAlgorithm.h"
 
+#include "DD4hep/Detector.h"
+#include "DDRec/MaterialManager.h"
+#include "DDRec/Vector3D.h"
+
 #include "EVENT/MCParticle.h"
 
 #include "CaloHitMonDataCollection.h"
@@ -631,18 +635,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   // Fill calo hit monitoring data from all clusters (regular + isolated hits)
   // and from the current calo hit list (isolated orphan hits)
   if (m_createCaloHitMonData && caloHitColl) {
-
-    // Build a comprehensive set of ALL calo hits from every possible source
-    // so the KD-tree used for isolation calculations is complete.
-    // Sources:
-    //   1. Regular (non-isolated) hits already inside clusters
-    //   2. Isolated hits attached to clusters
-    //   3. Unclustered hits
-    CaloHitList allCaloHits;
-
-    const CaloHitList *pCurrentListForKD = nullptr;
-    if (PandoraContentApi::GetCurrentList(*this, pCurrentListForKD) == STATUS_CODE_SUCCESS && pCurrentListForKD)
-      allCaloHits.insert(allCaloHits.end(), pCurrentListForKD->begin(), pCurrentListForKD->end());
+    const CaloHitList *pCaloHitList = nullptr;
+    if (PandoraContentApi::GetCurrentList(*this, pCaloHitList) != STATUS_CODE_SUCCESS || !pCaloHitList)
+      return STATUS_CODE_SUCCESS;
 
     // Initialize KDTree for efficient hit isolation calculations
     typedef KDTreeNodeInfoT<const pandora::CaloHit *, 4> HitKDNode4D;
@@ -650,13 +645,15 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
     std::vector<HitKDNode4D> hitNodes4D;
     HitKDTree4D hitsKdTree4D;
-    if (!allCaloHits.empty()) {
-      KDTreeTesseract hitsBoundingRegion4D = fill_and_bound_4d_kd_tree(this, allCaloHits, hitNodes4D, true);
+    if (!pCaloHitList->empty()) {
+      KDTreeTesseract hitsBoundingRegion4D = fill_and_bound_4d_kd_tree(this, *pCaloHitList, hitNodes4D, true);
       hitsKdTree4D.build(hitNodes4D, hitsBoundingRegion4D);
     }
 
+    std::vector<HitKDNode4D> found; // Re-use search result buffer
+
     // Helper function to replicate CaloHitPreparationAlgorithm::IsolationCountNearbyHits
-    auto isolationCountNearbyHits = [&](unsigned int searchLayer, const CaloHit *const pCaloHit, float &shortestIsolationDist) -> unsigned int {
+    auto isolationCountNearbyHits = [&](unsigned int searchLayer, const CaloHit *const pCaloHit, float &shortestIsolationDist, std::vector<HitKDNode4D> &foundBuffer) -> unsigned int {
       const CartesianVector &pos(pCaloHit->GetPositionVector());
       const float mag2(pos.GetMagnitudeSquared());
       const float isolationCutDistanceSquared((this->GetPandora().GetGeometry()->GetHitTypeGranularity(pCaloHit->GetHitType()) <= FINE) ? m_isolationCutDistanceFine2 : m_isolationCutDistanceCoarse2);
@@ -666,10 +663,10 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       const float searchDistance(m_isolationSearchSafetyFactor * std::sqrt(isolationCutDistanceSquared));
       KDTreeTesseract searchRegionHits = build_4d_kd_search_region(pCaloHit, searchDistance, searchDistance, searchDistance, static_cast<float>(searchLayer));
 
-      std::vector<HitKDNode4D> found;
-      hitsKdTree4D.search(searchRegionHits, found);
+      foundBuffer.clear();
+      hitsKdTree4D.search(searchRegionHits, foundBuffer);
 
-      for (const auto &hitNode : found) {
+      for (const auto &hitNode : foundBuffer) {
         const CaloHit *const pOtherHit = hitNode.data;
         if (pCaloHit == pOtherHit)
           continue;
@@ -688,7 +685,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     };
 
     // Helper lambda to fill one CaloHit entry
-    auto fillHit = [&](const CaloHit *const pCaloHit, bool isIsolated) {
+    auto fillHit = [&](const CaloHit *const pCaloHit, bool isIsolated, std::vector<HitKDNode4D> &foundBuffer) {
       const CartesianVector &pos(pCaloHit->GetPositionVector());
       auto &hitData = caloHitColl->create();
       hitData.setEnergy(pCaloHit->GetInputEnergy());
@@ -707,13 +704,13 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       // Calculate isolationNearbyHits (replicating logic from CaloHitPreparationAlgorithm)
       unsigned int isolationNearbyHits = 0;
       float shortestIsolationDist = std::numeric_limits<float>::max();
-      if (!allCaloHits.empty() && !hitNodes4D.empty()) {
+      if (!hitNodes4D.empty()) {
         const unsigned int layerI(pCaloHit->GetPseudoLayer());
         const unsigned int minLayer((layerI < m_isolationNLayers) ? 0 : layerI - m_isolationNLayers);
         const unsigned int maxLayer(layerI + m_isolationNLayers);
 
         for (unsigned int iLayer = minLayer; iLayer <= maxLayer; ++iLayer) {
-          isolationNearbyHits += isolationCountNearbyHits(iLayer, pCaloHit, shortestIsolationDist);
+          isolationNearbyHits += isolationCountNearbyHits(iLayer, pCaloHit, shortestIsolationDist, foundBuffer);
         }
       }
       hitData.setIsolationNearbyHits(isolationNearbyHits);
@@ -727,8 +724,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     };
 
     // Iterate over all hits and fill the hitData
-    for (const CaloHit *const pCaloHit : allCaloHits) {
-        fillHit(pCaloHit, pCaloHit->IsIsolated());
+    for (const CaloHit *const pCaloHit : *pCaloHitList) {
+        fillHit(pCaloHit, pCaloHit->IsIsolated(), found);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
