@@ -21,7 +21,10 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_pfo_mcGenStatus(),
       m_pfo_mcEnergy(), m_evt_eventNumber(0),
       m_evt_nClusteredNonIsolatedHits(0), m_evt_nClusteredIsolatedHits(0),
-      m_evt_nOrphanIsolatedHits(0), m_evt_orphanIsolatedEnergy(0.f),
+      m_evt_nUnclusteredIsolatedHits(0),
+      m_evt_clusteredIsolatedEnergy(0.f), m_evt_clusteredNonIsolatedEnergy(0.f),
+      m_evt_unclusteredIsolatedEnergy(0.f), m_evt_unclusteredNonIsolatedEnergy(0.f),
+      m_evt_totalEnergy(0.f),
       m_evt_nUnclusteredNonIsolatedHits(0), m_evt_nClusters(0), m_evt_nPFOs(0),
       m_clus_energy(), m_clus_nHits(), m_clus_nMipLikeHits(),
       m_clus_nEcalHits(), m_clus_nHcalHits(), m_clus_nMipEcalHits(),
@@ -64,13 +67,21 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("evt_nClusteredIsolatedHits",
                        &m_evt_nClusteredIsolatedHits,
                        "evt_nClusteredIsolatedHits/i");
-  m_outputTree->Branch("evt_nOrphanIsolatedHits", &m_evt_nOrphanIsolatedHits,
-                       "evt_nOrphanIsolatedHits/i");
-  m_outputTree->Branch("evt_orphanIsolatedEnergy", &m_evt_orphanIsolatedEnergy,
-                       "evt_orphanIsolatedEnergy/F");
   m_outputTree->Branch("evt_nUnclusteredNonIsolatedHits",
                        &m_evt_nUnclusteredNonIsolatedHits,
                        "evt_nUnclusteredNonIsolatedHits/i");
+  m_outputTree->Branch("evt_nUnclusteredIsolatedHits", &m_evt_nUnclusteredIsolatedHits,
+                       "evt_nUnclusteredIsolatedHits/i");
+  m_outputTree->Branch("evt_clusteredIsolatedEnergy", &m_evt_clusteredIsolatedEnergy,
+                       "evt_clusteredIsolatedEnergy/F");
+  m_outputTree->Branch("evt_clusteredNonIsolatedEnergy", &m_evt_clusteredNonIsolatedEnergy,
+                       "evt_clusteredNonIsolatedEnergy/F");
+  m_outputTree->Branch("evt_unclusteredIsolatedEnergy", &m_evt_unclusteredIsolatedEnergy,
+                       "evt_unclusteredIsolatedEnergy/F");
+  m_outputTree->Branch("evt_unclusteredNonIsolatedEnergy", &m_evt_unclusteredNonIsolatedEnergy,
+                       "evt_unclusteredNonIsolatedEnergy/F");
+  m_outputTree->Branch("evt_totalEnergy", &m_evt_totalEnergy,
+                       "evt_totalEnergy/F");
   m_outputTree->Branch("evt_nClusters", &m_evt_nClusters, "evt_nClusters/i");
   m_outputTree->Branch("evt_nPFOs", &m_evt_nPFOs, "evt_nPFOs/i");
 
@@ -171,8 +182,12 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_evt_eventNumber = 0;
   m_evt_nClusteredNonIsolatedHits = 0;
   m_evt_nClusteredIsolatedHits = 0;
-  m_evt_nOrphanIsolatedHits = 0;
-  m_evt_orphanIsolatedEnergy = 0.f;
+  m_evt_nUnclusteredIsolatedHits = 0;
+  m_evt_clusteredIsolatedEnergy = 0.f;
+  m_evt_clusteredNonIsolatedEnergy = 0.f;
+  m_evt_unclusteredIsolatedEnergy = 0.f;
+  m_evt_unclusteredNonIsolatedEnergy = 0.f;
+  m_evt_totalEnergy = 0.f;
   m_evt_nUnclusteredNonIsolatedHits = 0;
   m_evt_nClusters = 0;
   m_evt_nPFOs = 0;
@@ -296,8 +311,12 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
     m_evt_eventNumber = evtData.getEventNumber();
     m_evt_nClusteredNonIsolatedHits = evtData.getNClusteredNonIsolatedHits();
     m_evt_nClusteredIsolatedHits = evtData.getNClusteredIsolatedHits();
-    m_evt_nOrphanIsolatedHits = evtData.getNOrphanIsolatedHits();
-    m_evt_orphanIsolatedEnergy = evtData.getOrphanIsolatedEnergy();
+    m_evt_nUnclusteredIsolatedHits = evtData.getNUnclusteredIsolatedHits();
+    m_evt_clusteredIsolatedEnergy = evtData.getClusteredIsolatedEnergy();
+    m_evt_clusteredNonIsolatedEnergy = evtData.getClusteredNonIsolatedEnergy();
+    m_evt_unclusteredIsolatedEnergy = evtData.getUnclusteredIsolatedEnergy();
+    m_evt_unclusteredNonIsolatedEnergy = evtData.getUnclusteredNonIsolatedEnergy();
+    m_evt_totalEnergy = evtData.getTotalEnergy();
     m_evt_nUnclusteredNonIsolatedHits =
         evtData.getNUnclusteredNonIsolatedHits();
     m_evt_nClusters = evtData.getNClusters();
@@ -305,10 +324,14 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
     debug() << "Event summary: event=" << m_evt_eventNumber
             << " clusteredNonIsolatedHits=" << m_evt_nClusteredNonIsolatedHits
             << " clusteredIsolatedHits=" << m_evt_nClusteredIsolatedHits
-            << " orphanIsolatedHits=" << m_evt_nOrphanIsolatedHits
-            << " orphanIsolatedEnergy=" << m_evt_orphanIsolatedEnergy
+            << " unclusteredIsolatedHits=" << m_evt_nUnclusteredIsolatedHits
             << " unclusteredNonIsolatedHits="
             << m_evt_nUnclusteredNonIsolatedHits
+            << " clusteredIsolatedEnergy=" << m_evt_clusteredIsolatedEnergy
+            << " clusteredNonIsolatedEnergy=" << m_evt_clusteredNonIsolatedEnergy
+            << " unclusteredIsolatedEnergy=" << m_evt_unclusteredIsolatedEnergy
+            << " unclusteredNonIsolatedEnergy=" << m_evt_unclusteredNonIsolatedEnergy
+            << " totalEnergy=" << m_evt_totalEnergy
             << " clusters=" << m_evt_nClusters << " PFOs=" << m_evt_nPFOs
             << endmsg;
   } else {

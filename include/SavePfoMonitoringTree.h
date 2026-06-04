@@ -60,9 +60,13 @@ namespace GaudiPfoMonitoring
         mutable int          m_evt_eventNumber;
         mutable unsigned int m_evt_nClusteredNonIsolatedHits;
         mutable unsigned int m_evt_nClusteredIsolatedHits;
-        mutable unsigned int m_evt_nOrphanIsolatedHits;
-        mutable float        m_evt_orphanIsolatedEnergy;
+        mutable unsigned int m_evt_nUnclusteredIsolatedHits;
         mutable unsigned int m_evt_nUnclusteredNonIsolatedHits;
+        mutable float        m_evt_clusteredIsolatedEnergy;
+        mutable float        m_evt_clusteredNonIsolatedEnergy;
+        mutable float        m_evt_unclusteredIsolatedEnergy;
+        mutable float        m_evt_unclusteredNonIsolatedEnergy;
+        mutable float        m_evt_totalEnergy;
         mutable unsigned int m_evt_nClusters;
         mutable unsigned int m_evt_nPFOs;
 
