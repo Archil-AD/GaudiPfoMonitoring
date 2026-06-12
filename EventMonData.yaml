@@ -5,25 +5,37 @@ collection_id: 1003
 members:
   - name: eventNumber
     type: int32_t
+    description: "Sequential event identifier"
   - name: nClusteredNonIsolatedHits
     type: uint32_t
+    description: "Count of non-isolated hits that are part of a cluster"
   - name: nClusteredIsolatedHits
     type: uint32_t
+    description: "Count of isolated hits that are part of a cluster"
   - name: nUnclusteredIsolatedHits
     type: uint32_t
+    description: "Count of isolated hits not belonging to any cluster"
   - name: nUnclusteredNonIsolatedHits
     type: uint32_t
+    description: "Count of non-isolated hits not belonging to any cluster"
   - name: clusteredIsolatedEnergy
     type: float
+    description: "Total energy of clustered isolated hits"
   - name: clusteredNonIsolatedEnergy
     type: float
+    description: "Total energy of clustered non-isolated hits"
   - name: unclusteredIsolatedEnergy
     type: float
+    description: "Total energy of unclustered isolated hits"
   - name: unclusteredNonIsolatedEnergy
     type: float
+    description: "Total energy of unclustered non-isolated hits"
   - name: totalEnergy
     type: float
+    description: "Total hit energy in the event"
   - name: nClusters
     type: uint32_t
+    description: "Total number of reconstructed clusters"
   - name: nPFOs
     type: uint32_t
+    description: "Total number of Particle Flow Objects"

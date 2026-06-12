@@ -5,39 +5,58 @@ collection_id: 1002
 members:
   - name: energy
     type: float
+    description: "Reconstructed energy of the cluster"
   - name: nHits
     type: uint32_t
+    description: "Total number of calorimeter hits in the cluster"
   - name: nMipLikeHits
     type: uint32_t
+    description: "Number of hits tagged as MIP-like within the cluster"
   - name: nEcalHits
     type: uint32_t
+    description: "Number of hits in the ECAL part of the cluster"
   - name: nHcalHits
     type: uint32_t
+    description: "Number of hits in the HCAL part of the cluster"
   - name: nMipEcalHits
     type: uint32_t
+    description: "Number of MIP-like hits in the ECAL part of the cluster"
   - name: nMipHcalHits
     type: uint32_t
+    description: "Number of MIP-like hits in the HCAL part of the cluster"
   - name: startLayer
     type: uint32_t
+    description: "Innermost pseudo-layer occupied by the cluster"
   - name: nLayers
     type: uint32_t
+    description: "Number of layers spanned by the cluster"
   - name: isEm
     type: uint32_t
+    description: "Flag indicating if the cluster is identified as electromagnetic"
   - name: minClusterDistance
     type: float
+    description: "Minimum distance between this cluster and the most energetic cluster in the event"
   - name: maxCosOpeningAngle
     type: float
+    description: "-"
   - name: isInPfo
     type: uint32_t
+    description: "Flag indicating if the cluster is associated with a Particle Flow Object"
   - name: distToMostEnergeticClusterCentroid
     type: float
+    description: "Distance to the energy-weighted centroid of the most energetic cluster in the event"
   - name: mcPdg
     type: int32_t
+    description: "PDG code of the best matched MC particle for the cluster"
   - name: mcEnergy
     type: float
+    description: "Energy of the best matched MC particle for the cluster"
   - name: minInnerLayerSeparation
     type: float
+    description: "Minimum separation distance between inner-layer centroids of this cluster and the most energetic cluster in the event"
   - name: minGenericDistance
     type: float
+    description: "Minimum generic (perpendicular) distance between this cluster and the most energetic cluster in the event"
   - name: minParallelDistance
     type: float
+    description: "Minimum parallel distance between this cluster and the most energetic cluster in the event"

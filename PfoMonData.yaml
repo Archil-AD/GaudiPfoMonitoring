@@ -5,47 +5,70 @@ collection_id: 1001
 members:
   - name: energy
     type: float
+    description: "Reconstructed energy of the PFO"
   - name: pdg
     type: int32_t
+    description: "PDG code assigned to the reconstructed PFO"
   - name: fNeutral
     type: float
+    description: "Fraction of hadronic energy from neutral MC particles"
   - name: fPhoton
     type: float
+    description: "Fraction of hadronic energy from photons (MC)"
   - name: fCharged
     type: float
+    description: "Fraction of hadronic energy from charged MC particles"
   - name: alpha
     type: float
+    description: "Opening angle between PFO momentum and matched MC particle momentum"
   - name: px
     type: float
+    description: "Momentum X component"
   - name: py
     type: float
+    description: "Momentum Y component"
   - name: pz
     type: float
+    description: "Momentum Z component"
   - name: mass
     type: float
+    description: "Reconstructed mass"
   - name: nClusters
     type: uint32_t
+    description: "Number of clusters associated with this PFO"
   - name: nEmClusters
     type: uint32_t
+    description: "Number of EM-identified clusters in the PFO"
   - name: nHits
     type: uint32_t
+    description: "Total number of calorimeter hits in the PFO"
   - name: nMipLikeHits
     type: uint32_t
+    description: "Number of hits tagged as MIP-like"
   - name: nEcalHits
     type: uint32_t
+    description: "Number of hits in the ECAL"
   - name: nMipEcalHits
     type: uint32_t
+    description: "Number of MIP-like hits in the ECAL"
   - name: nHcalHits
     type: uint32_t
+    description: "Number of hits in the HCAL"
   - name: nMipHcalHits
     type: uint32_t
+    description: "Number of MIP-like hits in the HCAL"
   - name: minClusterDistance
     type: float
+    description: "Minimum distance between PFO clusters and the most energetic cluster in event"
   - name: startLayer
     type: uint32_t
+    description: "Innermost pseudo-layer occupied by PFO clusters"
   - name: nLayers
     type: uint32_t
+    description: "Number of layers spanned by the PFO clusters"
   - name: mcPdg
     type: int32_t
+    description: "PDG code of the best matched MC particle"
   - name: mcEnergy
     type: float
+    description: "Energy of the best matched MC particle"

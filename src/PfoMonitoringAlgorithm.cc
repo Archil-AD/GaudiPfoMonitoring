@@ -495,10 +495,16 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   }
   //--------------------------------------------------------------------------------------------------------------
 
+  //--------------------------------------------------------------------------------------------------------------
+  // Fill cluster monitoring data from pAllClusters
   if (m_createClusterMonData) {
-    //--------------------------------------------------------------------------------------------------------------
-    // Fill cluster monitoring data from pAllClusters
-    for (const Cluster *const pCluster : *pAllClusters) {
+    // sort the clusters with hadronic energy
+    ClusterVector sortedClusters(pAllClusters->begin(), pAllClusters->end());
+    std::sort(sortedClusters.begin(), sortedClusters.end(), [](const Cluster *const pLhs, const Cluster *const pRhs) {
+      return (pLhs->GetHadronicEnergy() > pRhs->GetHadronicEnergy());
+    });
+
+    for (const Cluster *const pCluster : sortedClusters) {
       unsigned int clusEcalHits = 0;
       unsigned int clusHcalHits = 0;
       unsigned int clusMipEcalHits = 0;
@@ -547,60 +553,72 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       // Quantities mirroring ProximityBasedMergingAlgorithm cuts:
       //   minInnerLayerSeparation  -- m_maxInnerLayerSeparation
       //   minGenericDistance       -- m_maxGenericDistance  (perpendicular)
-      //   minParallelDistance      -- m_maxParallelDistance (parallel gate)
+      //   minParallelDistance      -- m_maxParallelDistance (parallel)
       // Calculated specifically with respect to the most energetic cluster.
       // ---------------------------------------------------------------
       float clusMinInnerLayerSep = -1.f;
       float clusMinGenericDist   = -1.f;
       float clusMinParallelDist  = -1.f;
-
       if (hasMostEnergeticCluster && pMostEnergeticCluster != pCluster) {
-        const CartesianVector thisInnerCentroid(
-            pCluster->GetCentroid(pCluster->GetInnerPseudoLayer()));
-        // In the context of GetGenericDistanceBetweenClusters, pMostEnergeticCluster is the parent and pCluster is the daughter.
-        const OrderedCaloHitList &orderedCaloHitListParent(pMostEnergeticCluster->GetOrderedCaloHitList());
-        const OrderedCaloHitList &orderedCaloHitListDaughter(pCluster->GetOrderedCaloHitList());
 
         // --- inner-layer separation ---
+        const CartesianVector thisInnerCentroid(
+            pCluster->GetCentroid(pCluster->GetInnerPseudoLayer()));
         const CartesianVector otherInnerCentroid(
             pMostEnergeticCluster->GetCentroid(pMostEnergeticCluster->GetInnerPseudoLayer()));
         clusMinInnerLayerSep = (thisInnerCentroid - otherInnerCentroid).GetMagnitude();
 
         // --- generic (perpendicular) distance and associated parallel distance ---
+        // In the context of GetGenericDistanceBetweenClusters, pMostEnergeticCluster is the parent and pCluster is the daughter.
+        // number of layers to examine in the parent cluster starting from the inner layer of daughter cluster
+        const unsigned int nGenericDistanceLayers = 5; // NOTE: this is the default value in the ProximityBasedMerginAlgorithm
+        // number of adjacent layers to examine in the daughter cluster
         const unsigned int nAdjacentLayers = 2; // NOTE: this is the default value in the ProximityBasedMerginAlgorithm
+        const unsigned int startLayer(clusStartLayer);
+        const unsigned int endLayer(clusStartLayer + nGenericDistanceLayers);
 
-        for (const auto &layerEntryP : orderedCaloHitListParent) { // Loop over hits in the parent cluster (pMostEnergeticCluster)
-          const unsigned int iLayer = layerEntryP.first;
+        const OrderedCaloHitList &orderedCaloHitListParent(pMostEnergeticCluster->GetOrderedCaloHitList());
+        const OrderedCaloHitList &orderedCaloHitListDaughter(pCluster->GetOrderedCaloHitList());
 
-          for (const CaloHit *const pHitP : *layerEntryP.second) {
-            const CartesianVector &posP(pHitP->GetPositionVector());
-            const CartesianVector &dirP(pHitP->GetExpectedDirection());
+        for (unsigned int iLayer = startLayer; iLayer <= endLayer; ++iLayer)
+        {
+           OrderedCaloHitList::const_iterator iterP = orderedCaloHitListParent.find(iLayer);
 
-            const unsigned int firstExam(
-                (iLayer > nAdjacentLayers) ? iLayer - nAdjacentLayers : 0);
-            const unsigned int lastExam(iLayer + nAdjacentLayers);
+           if (orderedCaloHitListParent.end() == iterP)
+              continue;
 
-            for (unsigned int iExam = firstExam; iExam <= lastExam; ++iExam) {
-              OrderedCaloHitList::const_iterator iterD =
-                  orderedCaloHitListDaughter.find(iExam); // Compare with hits in the daughter cluster (pCluster)
-              if (orderedCaloHitListDaughter.end() == iterD)
-                continue;
+           // Loop over hits in parent cluster that fall between specified layers of dauther cluster
+           for (CaloHitList::const_iterator hitIterP = iterP->second->begin(), hitIterPEnd = iterP->second->end(); hitIterP != hitIterPEnd; ++hitIterP)
+           {
+              const CartesianVector &positionP((*hitIterP)->GetPositionVector());
+              const CartesianVector &directionP((*hitIterP)->GetExpectedDirection());
 
-              for (const CaloHit *const pHitD : *iterD->second) {
-                const CartesianVector diff(posP - pHitD->GetPositionVector());
-                const float perpDist(
-                    (dirP.GetCrossProduct(diff)).GetMagnitude());
-                const float paraDist(
-                    std::fabs(dirP.GetDotProduct(diff)));
+              // For each hit, consider distance to all hits in daughter cluster that lie within +/-nAdjacentLayers
+              const unsigned int firstExaminationLayer((iLayer > nAdjacentLayers) ? iLayer - nAdjacentLayers : 0);
+              const unsigned int lastExaminationLayer(iLayer + nAdjacentLayers);
 
-                if (clusMinGenericDist < 0.f ||
-                    perpDist < clusMinGenericDist) {
-                  clusMinGenericDist  = perpDist;
-                  clusMinParallelDist = paraDist;
-                }
+              for (unsigned int iExaminationLayer = firstExaminationLayer; iExaminationLayer <= lastExaminationLayer; ++iExaminationLayer)
+              {
+                  OrderedCaloHitList::const_iterator iterD = orderedCaloHitListDaughter.find(iExaminationLayer);
+
+                  if (orderedCaloHitListDaughter.end() == iterD)
+                      continue;
+
+                  for (CaloHitList::const_iterator hitIterD = iterD->second->begin(), hitIterDEnd = iterD->second->end(); hitIterD != hitIterDEnd; ++hitIterD)
+                  {
+                     const CartesianVector positionDifference(positionP - (*hitIterD)->GetPositionVector());
+
+                     const float perpendicularDistance((directionP.GetCrossProduct(positionDifference)).GetMagnitude());
+                     const float parallelDistance(std::fabs(directionP.GetDotProduct(positionDifference)));
+
+                     if (clusMinGenericDist < 0.f ||
+                         perpendicularDistance < clusMinGenericDist) {
+                        clusMinGenericDist  = perpendicularDistance;
+                        clusMinParallelDist = parallelDistance;
+                     }
+                  }
               }
-            }
-          }
+           }
         }
       }
 
@@ -632,8 +650,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   //--------------------------------------------------------------------------------------------------------------
 
   //--------------------------------------------------------------------------------------------------------------
-  // Fill calo hit monitoring data from all clusters (regular + isolated hits)
-  // and from the current calo hit list (isolated orphan hits)
+  // Fill calo hit monitoring data from all hits
   if (m_createCaloHitMonData && caloHitColl) {
     const CaloHitList *pCaloHitList = nullptr;
     if (PandoraContentApi::GetCurrentList(*this, pCaloHitList) != STATUS_CODE_SUCCESS || !pCaloHitList)

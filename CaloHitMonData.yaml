@@ -5,25 +5,37 @@ collection_id: 1004
 members:
   - name: energy
     type: float
+    description: "Input energy of the hit"
   - name: pseudoLayer
     type: uint32_t
+    description: "Pseudo-layer identifier"
   - name: cellLengthScale
     type: float
+    description: "Geometric scale of the cell"
   - name: isIsolated
     type: uint32_t
+    description: "Isolation flag from Pandora preprocessing"
   - name: isPossibleMip
     type: uint32_t
+    description: "MIP flag from Pandora preprocessing"
   - name: positionX
     type: float
+    description: "Cartesian X position"
   - name: positionY
     type: float
+    description: "Cartesian Y position"
   - name: positionZ
     type: float
+    description: "Cartesian Z position"
   - name: hitType
     type: uint32_t
+    description: "Detector type (0: ECAL, 1: HCAL, 2: Other)"
   - name: isolationNearbyHits
     type: uint32_t
+    description: "Number of nearby hits within the isolation search radius"
   - name: distToMostEnergeticClusterCentroid
     type: float
+    description: "Distance to the energy-weighted centroid of the most energetic cluster"
   - name: shortestIsolationDist
     type: float
+    description: "Distance to the nearest neighboring hit"
