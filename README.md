@@ -32,6 +32,8 @@ Describes the topological clusters formed from hits.
 * **distToMostEnergeticClusterCentroid**: Distance to the energy-weighted centroid of the most energetic cluster in the event.
 * **minInnerLayerSeparation**: Minimum separation distance between inner-layer centroids of this cluster and the most energetic cluster.
 * **minGenericDistance / minParallelDistance**: Advanced distance metrics (perpendicular and parallel projections to the lead cluster direction) used for cluster merging tuning.
+* **layerSpan**: Layer span relative to the most energetic cluster, as defined in the `ProximityBasedMergingAlgorithm`. A positive value indicates overlap.
+* **showerLayerSpan**: Shower layer span relative to the most energetic cluster, as defined in the `ProximityBasedMergingAlgorithm`. A positive value indicates the cluster starts after the shower start of the most energetic cluster.
 
 ### 3. Particle Flow Objects (`PfoMonData`)
 The final reconstructed particles (PFOs).

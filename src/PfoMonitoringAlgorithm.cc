@@ -16,6 +16,7 @@
 
 #include "LCHelpers/ClusterHelper.h"
 #include "LCHelpers/ReclusterHelper.h"
+#include "LCHelpers/FragmentRemovalHelper.h"
 #include "LCHelpers/SortingHelper.h"
 #include "LCUtility/KDTreeLinkerAlgoT.h"
 #include "LCUtility/KDTreeLinkerToolsT.h"
@@ -59,7 +60,11 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
       m_isolationCutDistanceCoarse2(200.f * 200.f),
       m_isolationSearchSafetyFactor(2.f),
       m_isolationNLayers(2),
-      m_eventNumber(0) {
+      m_eventNumber(0),
+      m_clusterContactThreshold(2.f), // Default from ProximityBasedMergingAlgorithm
+      m_closeHitThreshold(50.f), // Default from ProximityBasedMergingAlgorithm
+      m_nGenericDistanceLayers(5), // Default from ProximityBasedMergingAlgorithm
+      m_nAdjacentLayers(2) { // Default from ProximityBasedMergingAlgorithm
   std::cout << " ------------------------------------------------------------ "
             << std::endl;
   std::cout << " ------------ PfoMonitoringAlgorithm initialized ------------ "
@@ -571,11 +576,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         // --- generic (perpendicular) distance and associated parallel distance ---
         // In the context of GetGenericDistanceBetweenClusters, pMostEnergeticCluster is the parent and pCluster is the daughter.
         // number of layers to examine in the parent cluster starting from the inner layer of daughter cluster
-        const unsigned int nGenericDistanceLayers = 5; // NOTE: this is the default value in the ProximityBasedMerginAlgorithm
         // number of adjacent layers to examine in the daughter cluster
-        const unsigned int nAdjacentLayers = 2; // NOTE: this is the default value in the ProximityBasedMerginAlgorithm
         const unsigned int startLayer(clusStartLayer);
-        const unsigned int endLayer(clusStartLayer + nGenericDistanceLayers);
+        const unsigned int endLayer(clusStartLayer + m_nGenericDistanceLayers);
 
         const OrderedCaloHitList &orderedCaloHitListParent(pMostEnergeticCluster->GetOrderedCaloHitList());
         const OrderedCaloHitList &orderedCaloHitListDaughter(pCluster->GetOrderedCaloHitList());
@@ -594,8 +597,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
               const CartesianVector &directionP((*hitIterP)->GetExpectedDirection());
 
               // For each hit, consider distance to all hits in daughter cluster that lie within +/-nAdjacentLayers
-              const unsigned int firstExaminationLayer((iLayer > nAdjacentLayers) ? iLayer - nAdjacentLayers : 0);
-              const unsigned int lastExaminationLayer(iLayer + nAdjacentLayers);
+              const unsigned int firstExaminationLayer((iLayer > m_nAdjacentLayers) ? iLayer - m_nAdjacentLayers : 0);
+              const unsigned int lastExaminationLayer(iLayer + m_nAdjacentLayers);
 
               for (unsigned int iExaminationLayer = firstExaminationLayer; iExaminationLayer <= lastExaminationLayer; ++iExaminationLayer)
               {
@@ -645,6 +648,41 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       clusData.setMinInnerLayerSeparation(clusMinInnerLayerSep);
       clusData.setMinGenericDistance(clusMinGenericDist);
       clusData.setMinParallelDistance(clusMinParallelDist);
+
+      // --- layer span and shower layer span (mirroring ProximityBasedMerging) ---
+      // Parent = most energetic cluster, daughter = current cluster
+      int clusLayerSpan      = std::numeric_limits<int>::min();
+      int clusShowerLayerSpan = std::numeric_limits<int>::min();
+      if (hasMostEnergeticCluster && pMostEnergeticCluster != pCluster) {
+        const int layerSpan1 = static_cast<int>(pMostEnergeticCluster->GetOuterPseudoLayer())
+                             - static_cast<int>(clusStartLayer);
+        const int layerSpan2 = static_cast<int>(pCluster->GetOuterPseudoLayer())
+                             - static_cast<int>(pMostEnergeticCluster->GetInnerPseudoLayer());
+        clusLayerSpan = std::min(layerSpan1, layerSpan2);
+        clusShowerLayerSpan = static_cast<int>(clusStartLayer)
+                            - static_cast<int>(pMostEnergeticCluster->GetShowerStartLayer(this->GetPandora()));
+      }
+
+      // --- contact fraction (mirroring ProximityBasedMerging) ---
+      float clusContactFraction = -1.f;
+      if (hasMostEnergeticCluster && pMostEnergeticCluster != pCluster) {
+        unsigned int nContactLayers = 0;
+        if (STATUS_CODE_SUCCESS == lc_content::FragmentRemovalHelper::GetClusterContactDetails(
+            pCluster, pMostEnergeticCluster, m_clusterContactThreshold, nContactLayers, clusContactFraction)) {
+          // success
+        }
+      }
+
+      // --- close hit fraction (mirroring ProximityBasedMerging) ---
+      float clusCloseHitFraction = -1.f;
+      if (hasMostEnergeticCluster && pMostEnergeticCluster != pCluster) {
+        clusCloseHitFraction = lc_content::FragmentRemovalHelper::GetFractionOfCloseHits(pCluster, pMostEnergeticCluster, m_closeHitThreshold);
+      }
+
+      clusData.setLayerSpan(clusLayerSpan);
+      clusData.setShowerLayerSpan(clusShowerLayerSpan);
+      clusData.setContactFraction(clusContactFraction);
+      clusData.setCloseHitFraction(clusCloseHitFraction);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -1011,6 +1049,26 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "IsolationNLayers", m_isolationNLayers));
+
+  // Value from ProximityBasedMergingAlgorithm for contact fraction calculation
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "ClusterContactThreshold", m_clusterContactThreshold));
+
+  // Value from ProximityBasedMergingAlgorithm for close hit fraction calculation
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "CloseHitThreshold", m_closeHitThreshold));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "NGenericDistanceLayers",
+                           m_nGenericDistanceLayers));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "NAdjacentLayers",
+                           m_nAdjacentLayers));
 
   return STATUS_CODE_SUCCESS;
 }

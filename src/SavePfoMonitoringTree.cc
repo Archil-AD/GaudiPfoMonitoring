@@ -32,7 +32,8 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_clus_isEm(), m_clus_minClusterDistance(), m_clus_isInPfo(),
       m_clus_distToMostEnergeticClusterCentroid(),
       m_clus_minInnerLayerSeparation(), m_clus_minGenericDistance(),
-      m_clus_minParallelDistance(), m_hit_energy(),
+      m_clus_minParallelDistance(), m_clus_layerSpan(), m_clus_showerLayerSpan(), m_clus_contactFraction(), m_clus_closeHitFraction(),
+      m_hit_energy(),
       m_hit_pseudoLayer(), m_hit_cellLengthScale(), m_hit_isIsolated(),
       m_clus_mcPdg(), m_clus_mcEnergy(), m_hit_isPossibleMip(),
       m_hit_positionX(), m_hit_positionY(),
@@ -130,6 +131,10 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_minInnerLayerSeparation", &m_clus_minInnerLayerSeparation);
   m_outputTree->Branch("clus_minGenericDistance", &m_clus_minGenericDistance);
   m_outputTree->Branch("clus_minParallelDistance", &m_clus_minParallelDistance);
+  m_outputTree->Branch("clus_layerSpan",      &m_clus_layerSpan);
+  m_outputTree->Branch("clus_showerLayerSpan", &m_clus_showerLayerSpan);
+  m_outputTree->Branch("clus_contactFraction", &m_clus_contactFraction);
+  m_outputTree->Branch("clus_closeHitFraction", &m_clus_closeHitFraction);
 
   // CaloHit branches (one entry per calo hit)
   m_outputTree->Branch("hit_energy", &m_hit_energy);
@@ -211,6 +216,10 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_minInnerLayerSeparation.clear();
   m_clus_minGenericDistance.clear();
   m_clus_minParallelDistance.clear();
+  m_clus_layerSpan.clear();
+  m_clus_showerLayerSpan.clear();
+  m_clus_contactFraction.clear();
+  m_clus_closeHitFraction.clear();
 
   // Clear calo hit vectors
   m_hit_energy.clear();
@@ -295,6 +304,10 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_minInnerLayerSeparation.push_back(clusData.getMinInnerLayerSeparation());
       m_clus_minGenericDistance.push_back(clusData.getMinGenericDistance());
       m_clus_minParallelDistance.push_back(clusData.getMinParallelDistance());
+      m_clus_layerSpan.push_back(clusData.getLayerSpan());
+      m_clus_showerLayerSpan.push_back(clusData.getShowerLayerSpan());
+      m_clus_contactFraction.push_back(clusData.getContactFraction());
+      m_clus_closeHitFraction.push_back(clusData.getCloseHitFraction());
     }
   } else {
     warning() << "ClusterMonitoringData not found for this event." << endmsg;

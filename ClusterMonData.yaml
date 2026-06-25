@@ -60,3 +60,15 @@ members:
   - name: minParallelDistance
     type: float
     description: "Minimum parallel distance between this cluster and the most energetic cluster in the event"
+  - name: layerSpan
+    type: int32_t
+    description: "Layer span as in ProximityBasedMerging: min(mostEnergetic.outerLayer - cluster.innerLayer, cluster.outerLayer - mostEnergetic.innerLayer). Positive means overlap."
+  - name: showerLayerSpan
+    type: int32_t
+    description: "Shower layer span as in ProximityBasedMerging: cluster.innerLayer - mostEnergetic.showerStartLayer. Positive means cluster starts after shower start."
+  - name: contactFraction
+    type: float
+    description: "Fraction of overlapping layers in contact with the most energetic cluster, as defined in ProximityBasedMergingAlgorithm."
+  - name: closeHitFraction
+    type: float
+    description: "Fraction of hits in this cluster that are close to the most energetic cluster, as defined in ProximityBasedMergingAlgorithm."

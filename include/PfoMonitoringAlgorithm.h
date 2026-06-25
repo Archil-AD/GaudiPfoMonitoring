@@ -104,7 +104,11 @@ private:
     float m_isolationCutDistanceCoarse2;    ///< Squared isolation cut distance for coarse-granularity hits
     float m_isolationSearchSafetyFactor;    ///< Safety factor applied to the KD-tree search radius for isolation
     unsigned int m_isolationNLayers;        ///< Number of adjacent pseudo-layers to examine for isolation
-
+    float m_clusterContactThreshold;        ///< Cluster contact threshold from ProximityBasedMergingAlgorithm
+    float m_closeHitThreshold;              ///< Close hit threshold from ProximityBasedMergingAlgorithm
+    unsigned int m_nGenericDistanceLayers;  ///< Number of layers to examine for generic distance calculation
+    unsigned int m_nAdjacentLayers;         ///< Number of adjacent layers to examine for generic distance calculation
+    
     int m_eventNumber; ///< running event counter, incremented every Run()
 };
 
