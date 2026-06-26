@@ -33,12 +33,12 @@ members:
   - name: isEm
     type: uint32_t
     description: "Flag indicating if the cluster is identified as electromagnetic"
+  - name: passPhotonId
+    type: uint32_t
+    description: "Flag indicating if the cluster passed photonId"
   - name: minClusterDistance
     type: float
     description: "Minimum distance between this cluster and the most energetic cluster in the event"
-  - name: maxCosOpeningAngle
-    type: float
-    description: "-"
   - name: isInPfo
     type: uint32_t
     description: "Flag indicating if the cluster is associated with a Particle Flow Object"
@@ -72,3 +72,30 @@ members:
   - name: closeHitFraction
     type: float
     description: "Fraction of hits in this cluster that are close to the most energetic cluster, as defined in ProximityBasedMergingAlgorithm."
+  - name: canBeMerged
+    type: uint32_t
+    description: "Flag indicating if the cluster is a candidate for merging based on ProximityBasedMergingAlgorithm criteria (MIP fraction and RMS)."
+  - name: rms
+    type: float
+    description: "The transverse root mean square (RMS) of the cluster's hits, as used in ClusterHelper::CanMergeCluster and LCParticleIdPlugins::LCEmShowerId."
+  - name: dCosR
+    type: float
+    description: "Radial Direction Cosine (dCosR) of the cluster, as used in LCParticleIdPlugins::LCEmShowerId."
+  - name: hasAssociatedTrack
+    type: uint32_t
+    description: "Flag indicating if the cluster has at least one associated track."
+  - name: nRadiationLengthsBeforeShowerStart
+    type: float
+    description: "Total number of radiation lengths before start of the cluster, computed layer-by-layer as in LCParticleIdPlugins::LCEmShowerId."
+  - name: layer90RadLengths
+    type: float
+    description: "Total number of radiation lengths before longitudinal layer90, computed layer-by-layer as in LCParticleIdPlugins::LCEmShowerId."
+  - name: showerMaxRadLengths
+    type: float
+    description: "Number of radiation lengths before the shower maximum layer (the layer with highest energy deposit), computed as in LCParticleIdPlugins::LCEmShowerId."
+  - name: fractionOfEnergyAboveHighRadLengths
+    type: float
+    description: "Fraction of electromagnetic energy above specified high number of radiation lengths, computed as energyAboveHighRadLengths / totalElectromagneticEnergy as in LCParticleIdPlugins::LCEmShowerId."  
+  - name: radial90
+    type: float
+    description: "Radius (in mm) containing 90% of the cluster's electromagnetic energy, computed from hit energy and radial distance as in LCParticleIdPlugins::LCEmShowerId."

@@ -1,4 +1,3 @@
-
 /**
  *  @file   GaudiPfoMonitoring/src/PfoMonitoringAlgorithm.cc
  *
@@ -64,7 +63,10 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
       m_clusterContactThreshold(2.f), // Default from ProximityBasedMergingAlgorithm
       m_closeHitThreshold(50.f), // Default from ProximityBasedMergingAlgorithm
       m_nGenericDistanceLayers(5), // Default from ProximityBasedMergingAlgorithm
-      m_nAdjacentLayers(2) { // Default from ProximityBasedMergingAlgorithm
+      m_nAdjacentLayers(2), // Default from ProximityBasedMergingAlgorithm
+      m_canMergeMinMipFraction(0.7f), // Default from ProximityBasedMergingAlgorithm
+      m_canMergeMaxRms(5.f), // Default from ProximityBasedMergingAlgorithm
+      m_highRadLengths(30.f) { // Default from LCParticleIdPlugins::LCEmShowerId
   std::cout << " ------------------------------------------------------------ "
             << std::endl;
   std::cout << " ------------ PfoMonitoringAlgorithm initialized ------------ "
@@ -322,32 +324,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
       if( hasMostEnergeticCluster &&  pMostEnergeticCluster!=pPfoCluster )
         minClusterDistance =  ClusterHelper::GetDistanceToClosestHit(pPfoCluster, pMostEnergeticCluster);
-
-      /*
-      //            const CartesianVector
-      //            clusterDir(pPfoCluster->GetCentroid().GetUnitVector());
-      for (const Cluster *const pOtherCluster : *pAllClusters) {
-        // Skip clusters that are already part of this PFO
-        if (clusterList.end() !=
-            std::find(clusterList.begin(), clusterList.end(), pOtherCluster))
-          continue;
-
-        const float distance(
-            ClusterHelper::GetDistanceToClosestHit(pPfoCluster, pOtherCluster));
-        if (distance < std::abs(minClusterDistance))
-          minClusterDistance = distance;
-                        const CartesianVector
-           displacement(pOtherCluster->GetCentroid() -
-           pPfoCluster->GetCentroid()); if (displacement.GetMagnitudeSquared() >
-           std::numeric_limits<float>::epsilon())
-                        {
-                            const float
-           cosOpeningAngle(clusterDir.GetCosOpeningAngle(displacement)); if
-           (cosOpeningAngle > maxCosOpeningAngle) maxCosOpeningAngle =
-           cosOpeningAngle;
-                        }
-      }
-      */
     }
 
     const unsigned int pfoStartLayer =
@@ -524,7 +500,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
           this->GetPandora().GetPlugins()->GetParticleId()->IsEmShower(pCluster)
               ? 1
               : 0;
-
+      const unsigned int clusPassPhotonId = pCluster->PassPhotonId(this->GetPandora())
+              ? 1
+              : 0;
       // minimum distance with most energetic cluster
       float clusMinDist = -1.f;
       if( hasMostEnergeticCluster &&  pMostEnergeticCluster!=pCluster )
@@ -638,14 +616,23 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       clusData.setStartLayer(clusStartLayer);
       clusData.setNLayers(clusNLayers);
       clusData.setIsEm(clusIsEm);
+      clusData.setPassPhotonId(clusPassPhotonId);
       clusData.setMinClusterDistance(clusMinDist);
       clusData.setDistToMostEnergeticClusterCentroid(distToMECC);
       clusData.setIsInPfo(pfoClusterSet.count(pCluster) ? 1 : 0);
 
+      clusData.setHasAssociatedTrack(pCluster->GetAssociatedTrackList().empty() ? 0 : 1);
       const MCParticle *const pBestMCMatch = this->GetClusterMCParticleInfo(pCluster);
+      const bool canBeMerged = ClusterHelper::CanMergeCluster(
+          this->GetPandora(), pCluster, m_canMergeMinMipFraction,
+          m_canMergeMaxRms);
+      clusData.setCanBeMerged(canBeMerged ? 1 : 0);
       clusData.setMcPdg(pBestMCMatch ? pBestMCMatch->GetParticleId() : 0);
       clusData.setMcEnergy(pBestMCMatch ? pBestMCMatch->GetEnergy() : 0.f);
       clusData.setMinInnerLayerSeparation(clusMinInnerLayerSep);
+      const pandora::ClusterFitResult& fitResult = pCluster->GetFitToAllHitsResult();
+      clusData.setRms(fitResult.IsFitSuccessful() ? fitResult.GetRms() : -1.f);
+      clusData.setDCosR(fitResult.IsFitSuccessful() ? fitResult.GetRadialDirectionCosine() : -2.f);
       clusData.setMinGenericDistance(clusMinGenericDist);
       clusData.setMinParallelDistance(clusMinParallelDist);
 
@@ -679,10 +666,22 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         clusCloseHitFraction = lc_content::FragmentRemovalHelper::GetFractionOfCloseHits(pCluster, pMostEnergeticCluster, m_closeHitThreshold);
       }
 
+      // --- shower quantities (mirroring LCParticleIdPlugins::LCEmShowerId) ---
+      float clusNRadLengthsBeforeShowerStart(-1.f), clusLayer90RadLengths(-1.f), clusShowerMaxRadLengths(-1.f), clusEnergyAboveHighRadLengths(-1.f), clusRadial90(-1.f);
+      this->GetClusterShowerQuantities(pCluster, clusNRadLengthsBeforeShowerStart, clusLayer90RadLengths, clusShowerMaxRadLengths, clusEnergyAboveHighRadLengths, clusRadial90);
+
+      const float clusTotalEMEnergy = pCluster->GetElectromagneticEnergy() - pCluster->GetIsolatedElectromagneticEnergy();
+      const float clusFractionAboveHighRadLengths = (clusTotalEMEnergy > std::numeric_limits<float>::epsilon()) ? clusEnergyAboveHighRadLengths / clusTotalEMEnergy : -1.f;
+
       clusData.setLayerSpan(clusLayerSpan);
       clusData.setShowerLayerSpan(clusShowerLayerSpan);
       clusData.setContactFraction(clusContactFraction);
       clusData.setCloseHitFraction(clusCloseHitFraction);
+      clusData.setNRadiationLengthsBeforeShowerStart(clusNRadLengthsBeforeShowerStart);
+      clusData.setLayer90RadLengths(clusLayer90RadLengths);
+      clusData.setShowerMaxRadLengths(clusShowerMaxRadLengths);
+      clusData.setFractionOfEnergyAboveHighRadLengths(clusFractionAboveHighRadLengths);
+      clusData.setRadial90(clusRadial90);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -962,6 +961,127 @@ void PfoMonitoringAlgorithm::GetMipLikeHits(
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void PfoMonitoringAlgorithm::GetClusterShowerQuantities(
+    const pandora::Cluster *const pCluster, float &nRadiationLengthsBeforeShowerStart, float &layer90RadLengths,
+    float &showerMaxRadLengths, float &energyAboveHighRadLengths, float &radial90) const
+{
+    nRadiationLengthsBeforeShowerStart = -1.f;
+    layer90RadLengths = -1.f;
+    showerMaxRadLengths = -1.f;
+    energyAboveHighRadLengths = -1.f;
+    radial90 = -1.f;
+
+    const float totalElectromagneticEnergy(pCluster->GetElectromagneticEnergy() - pCluster->GetIsolatedElectromagneticEnergy());
+    if (totalElectromagneticEnergy < std::numeric_limits<float>::epsilon())
+        return;
+
+    const CartesianVector &clusterDirection(pCluster->GetFitToAllHitsResult().IsFitSuccessful() ?
+        pCluster->GetFitToAllHitsResult().GetDirection() : pCluster->GetInitialDirection());
+
+    const CartesianVector &clusterIntercept(pCluster->GetFitToAllHitsResult().IsFitSuccessful() ?
+        pCluster->GetFitToAllHitsResult().GetIntercept() : CartesianVector(0.f, 0.f, 0.f));
+
+    const float minCosAngle(0.3f);
+    const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
+    const unsigned int innerPseudoLayer(pCluster->GetInnerPseudoLayer());
+    const unsigned int firstPseudoLayer(this->GetPandora().GetPlugins()->GetPseudoLayerPlugin()->GetPseudoLayerAtIp());
+
+    // Calculate properties of longitudinal shower profile: layer90 and shower max layer
+    bool foundLayer90(false);
+    float layer90EnergySum(0.f);
+    float maxEnergyInlayer(0.f);
+    float nRadiationLengths(0.f), nRadLengthsInLastLayer(0.f);
+
+    energyAboveHighRadLengths = 0.f;
+    nRadiationLengthsBeforeShowerStart = 0.f;
+    showerMaxRadLengths = 0.f;
+
+    // For radial90: collect (hitEnergy, radialDistance) pairs
+    typedef std::pair<float, float> HitEnergyDistance;
+    std::vector<HitEnergyDistance> hitEnergyDistanceVector;
+
+    for (unsigned int iLayer = innerPseudoLayer, outerPseudoLayer = pCluster->GetOuterPseudoLayer(); iLayer <= outerPseudoLayer; ++iLayer)
+    {
+        OrderedCaloHitList::const_iterator iter = orderedCaloHitList.find(iLayer);
+        if ((orderedCaloHitList.end() == iter) || (iter->second->empty()))
+        {
+            nRadiationLengths += nRadLengthsInLastLayer;
+            continue;
+        }
+
+        const unsigned int nHitsInLayer(iter->second->size());
+        if (0 == nHitsInLayer)
+            continue;
+
+        float energyInLayer(0.f);
+        float nRadiationLengthsInLayer(0.f);
+
+        for (CaloHitList::const_iterator hitIter = iter->second->begin(), hitIterEnd = iter->second->end(); hitIter != hitIterEnd; ++hitIter)
+        {
+            float cosOpeningAngle(std::fabs((*hitIter)->GetCellNormalVector().GetCosOpeningAngle(clusterDirection)));
+            cosOpeningAngle = std::max(cosOpeningAngle, minCosAngle);
+
+            const float hitEnergy((*hitIter)->GetElectromagneticEnergy());
+            energyInLayer += hitEnergy;
+            nRadiationLengthsInLayer += (*hitIter)->GetNCellRadiationLengths() / cosOpeningAngle;
+
+            const float radialDistance(((*hitIter)->GetPositionVector() - clusterIntercept).GetCrossProduct(clusterDirection).GetMagnitude());
+            hitEnergyDistanceVector.push_back(HitEnergyDistance(hitEnergy, radialDistance));
+        }
+
+        layer90EnergySum += energyInLayer;
+        nRadiationLengthsInLayer /= static_cast<float>(nHitsInLayer);
+        nRadLengthsInLastLayer = nRadiationLengthsInLayer;
+        nRadiationLengths += nRadiationLengthsInLayer;
+
+        // Identify number of radiation lengths before cluster start
+        // NOTE: this follows the logic of LCParticleIdPlugins::LCEmShowerId, which assumes that all layers are identical (this is not true for ALLEGRO). 
+        if (innerPseudoLayer == iLayer)
+        {
+            nRadiationLengths *= static_cast<float>(innerPseudoLayer + 1 - firstPseudoLayer);
+            nRadiationLengthsBeforeShowerStart = nRadiationLengths;
+        }
+
+        // Identify number of radiation lengths before longitudinal layer90
+        if (!foundLayer90 && (layer90EnergySum > 0.9f * totalElectromagneticEnergy))
+        {
+            foundLayer90 = true;
+            layer90RadLengths = nRadiationLengths;
+        }
+
+        // Identify number of radiation lengths before the shower maximum layer (layer with highest energy)
+        if (energyInLayer > maxEnergyInlayer)
+        {
+            showerMaxRadLengths = nRadiationLengths;
+            maxEnergyInlayer = energyInLayer;
+        }
+        // Count energy above specified "high" number of radiation lengths
+        if (nRadiationLengths > m_highRadLengths)
+        {
+            energyAboveHighRadLengths += energyInLayer;
+        }
+    }
+
+    // Sort by radial distance and find radial90
+    std::sort(hitEnergyDistanceVector.begin(), hitEnergyDistanceVector.end(),
+        [](const HitEnergyDistance &a, const HitEnergyDistance &b) { return a.second < b.second; });
+
+    float radial90EnergySum(0.f);
+    radial90 = std::numeric_limits<float>::max();
+    for (std::vector<HitEnergyDistance>::const_iterator iter = hitEnergyDistanceVector.begin(),
+         iterEnd = hitEnergyDistanceVector.end(); iter != iterEnd; ++iter)
+    {
+        radial90EnergySum += iter->first;
+        if (radial90EnergySum > 0.9f * totalElectromagneticEnergy)
+        {
+            radial90 = iter->second;
+            break;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 const MCParticle* PfoMonitoringAlgorithm::GetBestMCParticleMatch(const MCParticleToFloatMap &mcParticleContributions) const
 {
     const MCParticle *pBestMCMatch(nullptr);
@@ -1069,6 +1189,21 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "NAdjacentLayers",
                            m_nAdjacentLayers));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "CanMergeMinMipFraction",
+                           m_canMergeMinMipFraction));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "CanMergeMaxRms",
+                           m_canMergeMaxRms));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "HighRadLengths",
+                           m_highRadLengths));
 
   return STATUS_CODE_SUCCESS;
 }

@@ -28,14 +28,14 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_evt_nUnclusteredNonIsolatedHits(0), m_evt_nClusters(0), m_evt_nPFOs(0),
       m_clus_energy(), m_clus_nHits(), m_clus_nMipLikeHits(),
       m_clus_nEcalHits(), m_clus_nHcalHits(), m_clus_nMipEcalHits(),
-      m_clus_nMipHcalHits(), m_clus_startLayer(), m_clus_nLayers(),
+      m_clus_nMipHcalHits(), m_clus_startLayer(), m_clus_nLayers(), m_clus_passPhotonId(),
       m_clus_isEm(), m_clus_minClusterDistance(), m_clus_isInPfo(),
       m_clus_distToMostEnergeticClusterCentroid(),
       m_clus_minInnerLayerSeparation(), m_clus_minGenericDistance(),
       m_clus_minParallelDistance(), m_clus_layerSpan(), m_clus_showerLayerSpan(), m_clus_contactFraction(), m_clus_closeHitFraction(),
+      m_clus_canBeMerged(), m_clus_rms(), m_clus_dCosR(), m_clus_hasAssociatedTrack(), m_clus_nRadiationLengths(), m_clus_layer90RadLengths(), m_clus_showerMaxRadLengths(), m_clus_radial90(), m_clus_fractionOfEnergyAboveHighRadLengths(), m_clus_mcPdg(), m_clus_mcEnergy(), m_hit_isPossibleMip(),
       m_hit_energy(),
       m_hit_pseudoLayer(), m_hit_cellLengthScale(), m_hit_isIsolated(),
-      m_clus_mcPdg(), m_clus_mcEnergy(), m_hit_isPossibleMip(),
       m_hit_positionX(), m_hit_positionY(),
       m_hit_positionZ(), m_hit_type(), m_hit_isolationNearbyHits(),
       m_hit_distToMostEnergeticClusterCentroid(), m_hit_shortestIsolationDist(),
@@ -122,6 +122,7 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_startLayer", &m_clus_startLayer);
   m_outputTree->Branch("clus_nLayers", &m_clus_nLayers);
   m_outputTree->Branch("clus_isEm", &m_clus_isEm);
+  m_outputTree->Branch("clus_passPhotonId", &m_clus_passPhotonId);
   m_outputTree->Branch("clus_minClusterDistance", &m_clus_minClusterDistance);
   m_outputTree->Branch("clus_isInPfo", &m_clus_isInPfo);
   m_outputTree->Branch("clus_distToMostEnergeticClusterCentroid",
@@ -135,6 +136,15 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_showerLayerSpan", &m_clus_showerLayerSpan);
   m_outputTree->Branch("clus_contactFraction", &m_clus_contactFraction);
   m_outputTree->Branch("clus_closeHitFraction", &m_clus_closeHitFraction);
+  m_outputTree->Branch("clus_canBeMerged", &m_clus_canBeMerged);
+  m_outputTree->Branch("clus_rms", &m_clus_rms);
+  m_outputTree->Branch("clus_dCosR", &m_clus_dCosR);
+  m_outputTree->Branch("clus_nRadiationLengthsBeforeShowerStart", &m_clus_nRadiationLengths);
+  m_outputTree->Branch("clus_layer90RadLengths", &m_clus_layer90RadLengths);
+  m_outputTree->Branch("clus_showerMaxRadLengths", &m_clus_showerMaxRadLengths);
+  m_outputTree->Branch("clus_fractionOfEnergyAboveHighRadLengths", &m_clus_fractionOfEnergyAboveHighRadLengths);
+  m_outputTree->Branch("clus_radial90", &m_clus_radial90);
+  m_outputTree->Branch("clus_hasAssociatedTrack", &m_clus_hasAssociatedTrack);
 
   // CaloHit branches (one entry per calo hit)
   m_outputTree->Branch("hit_energy", &m_hit_energy);
@@ -208,6 +218,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_startLayer.clear();
   m_clus_nLayers.clear();
   m_clus_isEm.clear();
+  m_clus_passPhotonId.clear();
   m_clus_minClusterDistance.clear();
   m_clus_distToMostEnergeticClusterCentroid.clear();
   m_clus_isInPfo.clear();
@@ -220,6 +231,15 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_showerLayerSpan.clear();
   m_clus_contactFraction.clear();
   m_clus_closeHitFraction.clear();
+  m_clus_canBeMerged.clear();
+  m_clus_rms.clear();
+  m_clus_dCosR.clear();
+  m_clus_nRadiationLengths.clear();
+  m_clus_layer90RadLengths.clear();
+  m_clus_showerMaxRadLengths.clear();
+  m_clus_radial90.clear();
+  m_clus_fractionOfEnergyAboveHighRadLengths.clear();
+  m_clus_hasAssociatedTrack.clear();
 
   // Clear calo hit vectors
   m_hit_energy.clear();
@@ -295,6 +315,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_startLayer.push_back(clusData.getStartLayer());
       m_clus_nLayers.push_back(clusData.getNLayers());
       m_clus_isEm.push_back(clusData.getIsEm());
+      m_clus_passPhotonId.push_back(clusData.getPassPhotonId());
       m_clus_minClusterDistance.push_back(clusData.getMinClusterDistance());
       m_clus_isInPfo.push_back(clusData.getIsInPfo());
       m_clus_distToMostEnergeticClusterCentroid.push_back(
@@ -308,6 +329,15 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_showerLayerSpan.push_back(clusData.getShowerLayerSpan());
       m_clus_contactFraction.push_back(clusData.getContactFraction());
       m_clus_closeHitFraction.push_back(clusData.getCloseHitFraction());
+      m_clus_canBeMerged.push_back(clusData.getCanBeMerged());
+      m_clus_rms.push_back(clusData.getRms());
+      m_clus_dCosR.push_back(clusData.getDCosR());
+      m_clus_nRadiationLengths.push_back(clusData.getNRadiationLengthsBeforeShowerStart());
+      m_clus_showerMaxRadLengths.push_back(clusData.getShowerMaxRadLengths());
+      m_clus_radial90.push_back(clusData.getRadial90());
+      m_clus_layer90RadLengths.push_back(clusData.getLayer90RadLengths());
+      m_clus_fractionOfEnergyAboveHighRadLengths.push_back(clusData.getFractionOfEnergyAboveHighRadLengths());
+      m_clus_hasAssociatedTrack.push_back(clusData.getHasAssociatedTrack());
     }
   } else {
     warning() << "ClusterMonitoringData not found for this event." << endmsg;

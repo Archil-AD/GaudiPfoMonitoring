@@ -69,6 +69,17 @@ private:
                           unsigned int &nMipEcalHits, unsigned int &nMipHcalHits) const;
 
     /**
+     *  @brief  GetClusterShowerQuantities
+     *
+     *  @param  pCluster the cluster to examine
+     *  @param  nRadiationLengths output: total radiation lengths spanned by the cluster
+     *  @param  showerMaxRadLengths output: radiation lengths before shower maximum
+     *  @param  radial90 output: radius containing 90% of electromagnetic energy
+     */
+     void GetClusterShowerQuantities(const pandora::Cluster *const pCluster, float &nRadiationLengthsBeforeShowerStart, float &layer90RadLengths,
+         float &showerMaxRadLengths, float &energyAboveHighRadLengths, float &radial90) const;
+
+    /**
      *  @brief  GetClusterMCParticleInfo
      *
      *  @param  pCluster
@@ -108,7 +119,10 @@ private:
     float m_closeHitThreshold;              ///< Close hit threshold from ProximityBasedMergingAlgorithm
     unsigned int m_nGenericDistanceLayers;  ///< Number of layers to examine for generic distance calculation
     unsigned int m_nAdjacentLayers;         ///< Number of adjacent layers to examine for generic distance calculation
-    
+    float m_canMergeMinMipFraction;         ///< Min MIP fraction for a cluster to be mergeable, from ProximityBasedMergingAlgorithm
+    float m_canMergeMaxRms;                 ///< Max hit RMS for a cluster to be mergeable, from ProximityBasedMergingAlgorithm
+    float m_highRadLengths;                 ///< High radiation length threshold for energyAboveHighRadLengths computation, from LCParticleIdPlugins::LCEmShowerId
+       
     int m_eventNumber; ///< running event counter, incremented every Run()
 };
 

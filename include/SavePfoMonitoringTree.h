@@ -81,11 +81,13 @@ namespace GaudiPfoMonitoring
         mutable std::vector<unsigned int> m_clus_startLayer;
         mutable std::vector<unsigned int> m_clus_nLayers;
         mutable std::vector<unsigned int> m_clus_isEm;
+        mutable std::vector<unsigned int> m_clus_passPhotonId;
         mutable std::vector<float>        m_clus_minClusterDistance;
         mutable std::vector<unsigned int> m_clus_isInPfo;
         mutable std::vector<float>        m_clus_distToMostEnergeticClusterCentroid;
         mutable std::vector<int>          m_clus_mcPdg;
         mutable std::vector<float>        m_clus_mcEnergy;
+        mutable std::vector<unsigned int> m_clus_canBeMerged;
         mutable std::vector<float>        m_clus_minInnerLayerSeparation;
         mutable std::vector<float>        m_clus_minGenericDistance;
         mutable std::vector<float>        m_clus_minParallelDistance;
@@ -93,6 +95,14 @@ namespace GaudiPfoMonitoring
         mutable std::vector<int>          m_clus_showerLayerSpan;
         mutable std::vector<float>        m_clus_contactFraction;
         mutable std::vector<float>        m_clus_closeHitFraction;
+        mutable std::vector<float>        m_clus_rms;
+        mutable std::vector<float>        m_clus_dCosR;
+        mutable std::vector<unsigned int> m_clus_hasAssociatedTrack;
+        mutable std::vector<float>        m_clus_nRadiationLengths;
+        mutable std::vector<float>        m_clus_layer90RadLengths;
+        mutable std::vector<float>        m_clus_showerMaxRadLengths;
+        mutable std::vector<float>        m_clus_radial90;
+        mutable std::vector<float>        m_clus_fractionOfEnergyAboveHighRadLengths;
 
         // CaloHit branches (one entry per calo hit)
         mutable std::vector<float>        m_hit_energy;
