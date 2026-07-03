@@ -53,7 +53,6 @@ namespace GaudiPfoMonitoring
         mutable std::vector<unsigned int> m_pfo_startLayer;
         mutable std::vector<unsigned int> m_pfo_nLayers;
         mutable std::vector<int> m_pfo_mcPdg;
-        mutable std::vector<int> m_pfo_mcGenStatus;
         mutable std::vector<float> m_pfo_mcEnergy;
 
         // Event-level summary (one scalar per event)
@@ -67,6 +66,12 @@ namespace GaudiPfoMonitoring
         mutable float        m_evt_unclusteredIsolatedEnergy;
         mutable float        m_evt_unclusteredNonIsolatedEnergy;
         mutable float        m_evt_totalEnergy;
+        mutable float        m_evt_chargedEnergy;
+        mutable float        m_evt_neutralEnergy;
+        mutable float        m_evt_fChargedEnergyRecoCharged;
+        mutable float        m_evt_fChargedEnergyRecoNeutral;
+        mutable float        m_evt_fNeutralEnergyRecoCharged;
+        mutable float        m_evt_fNeutralEnergyRecoNeutral;
         mutable unsigned int m_evt_nClusters;
         mutable unsigned int m_evt_nPFOs;
 
@@ -79,6 +84,7 @@ namespace GaudiPfoMonitoring
         mutable std::vector<unsigned int> m_clus_nMipEcalHits;
         mutable std::vector<unsigned int> m_clus_nMipHcalHits;
         mutable std::vector<unsigned int> m_clus_startLayer;
+        mutable std::vector<unsigned int> m_clus_showerStartLayer;
         mutable std::vector<unsigned int> m_clus_nLayers;
         mutable std::vector<unsigned int> m_clus_isEm;
         mutable std::vector<unsigned int> m_clus_passPhotonId;
@@ -95,10 +101,15 @@ namespace GaudiPfoMonitoring
         mutable std::vector<int>          m_clus_showerLayerSpan;
         mutable std::vector<float>        m_clus_contactFraction;
         mutable std::vector<float>        m_clus_closeHitFraction;
+        mutable std::vector<float>        m_clus_fractionInCone;
         mutable std::vector<float>        m_clus_rms;
         mutable std::vector<float>        m_clus_dCosR;
         mutable std::vector<unsigned int> m_clus_hasAssociatedTrack;
-        mutable std::vector<float>        m_clus_nRadiationLengths;
+        mutable std::vector<float>        m_clus_fNeutral;
+        mutable std::vector<float>        m_clus_fPhoton;
+        mutable std::vector<float>        m_clus_fCharged;
+        mutable std::vector<float>        m_clus_nRadiationLengths;        
+        mutable std::vector<float>        m_clus_nRadiationLengthsBeforeClusterStart;
         mutable std::vector<float>        m_clus_layer90RadLengths;
         mutable std::vector<float>        m_clus_showerMaxRadLengths;
         mutable std::vector<float>        m_clus_radial90;
@@ -117,6 +128,7 @@ namespace GaudiPfoMonitoring
         mutable std::vector<unsigned int> m_hit_isolationNearbyHits;
         mutable std::vector<float>        m_hit_distToMostEnergeticClusterCentroid;
         mutable std::vector<float>        m_hit_shortestIsolationDist;
+        mutable std::vector<int>          m_hit_mcPdg;
 
         ServiceHandle<IDataProviderSvc> m_eventDataSvc;
     };

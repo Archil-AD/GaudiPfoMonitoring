@@ -73,10 +73,13 @@ private:
      *
      *  @param  pCluster the cluster to examine
      *  @param  nRadiationLengths output: total radiation lengths spanned by the cluster
+     *  @param  nRadiationLengthsBeforeClusterStart output: radiation lengths before cluster start
+     *  @param  layer90RadLengths output: radiation lengths before layer90
      *  @param  showerMaxRadLengths output: radiation lengths before shower maximum
+     *  @param  energyAboveHighRadLengths output: energy above high radiation length threshold
      *  @param  radial90 output: radius containing 90% of electromagnetic energy
      */
-     void GetClusterShowerQuantities(const pandora::Cluster *const pCluster, float &nRadiationLengthsBeforeShowerStart, float &layer90RadLengths,
+     void GetClusterShowerQuantities(const pandora::Cluster *const pCluster, float &nRadiationLengths, float &nRadiationLengthsBeforeClusterStart, float &layer90RadLengths,
          float &showerMaxRadLengths, float &energyAboveHighRadLengths, float &radial90) const;
 
     /**
@@ -86,7 +89,8 @@ private:
      *
      *  @return the best matched MC particle
      */
-    const pandora::MCParticle* GetClusterMCParticleInfo(const pandora::Cluster *const pCluster) const;
+    const pandora::MCParticle* GetClusterMCParticleInfo(const pandora::Cluster *const pCluster, float &fCharged, float &fPhoton,
+    float &fNeutral) const;
 
     /**
      *  @brief  GetBestMCParticleMatch
@@ -96,6 +100,17 @@ private:
      *  @return the best matched MC particle
      */
     const pandora::MCParticle* GetBestMCParticleMatch(const MCParticleToFloatMap &mcParticleContributions) const;
+
+    /**
+     *  @brief  Get the fraction of hits in a daughter cluster that lie within a cone defined by a parent cluster's fit
+     *
+     *  @param  pParentCluster the parent cluster, defining the cone
+     *  @param  pDaughterCluster the daughter cluster, whose hits are to be checked
+     *  @param  parentMipFitResult the result of a fit to the parent cluster's MIP-like segment
+     *
+     *  @return the fraction of hits in the cone
+     */
+    float GetFractionInCone(const pandora::Cluster *const pParentCluster, const pandora::Cluster *const pDaughterCluster, const pandora::ClusterFitResult &parentMipFitResult) const;
 
     pandora::MCParticleList m_trackMcPfoTargets;
 
@@ -122,6 +137,15 @@ private:
     float m_canMergeMinMipFraction;         ///< Min MIP fraction for a cluster to be mergeable, from ProximityBasedMergingAlgorithm
     float m_canMergeMaxRms;                 ///< Max hit RMS for a cluster to be mergeable, from ProximityBasedMergingAlgorithm
     float m_highRadLengths;                 ///< High radiation length threshold for energyAboveHighRadLengths computation, from LCParticleIdPlugins::LCEmShowerId
+
+    // ConeBasedMergingAlgorithm parameters
+    unsigned int m_minLayersToShowerStart;  ///< Minimum number of layers from inner layer to shower start for MIP fit
+    float m_coneCosineHalfAngle;            ///< Cosine of the cone half-angle for merging
+    float m_minCosConeAngleWrtRadial;       ///< Minimum cosine of the angle between cone axis and radial direction
+    float m_cosConeAngleWrtRadialCut1;      ///< First cut on cosine of angle between cone axis and radial direction
+    float m_minHitSeparationCut1;           ///< First cut on minimum hit separation for low-angle cones
+    float m_cosConeAngleWrtRadialCut2;      ///< Second cut on cosine of angle between cone axis and radial direction
+    float m_minHitSeparationCut2;           ///< Second cut on minimum hit separation for low-angle cones
        
     int m_eventNumber; ///< running event counter, incremented every Run()
 };

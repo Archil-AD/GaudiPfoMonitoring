@@ -36,6 +36,24 @@ members:
   - name: nClusters
     type: uint32_t
     description: "Total number of reconstructed clusters"
+  - name: chargedEnergy
+    type: float
+    description: "Total hadronic energy from charged MC particles in the event"
+  - name: neutralEnergy
+    type: float
+    description: "Total hadronic energy from neutral MC particles in the event"
+  - name: fChargedEnergyRecoCharged
+    type: float
+    description: "Fraction of charged hadronic energy reconstructed as charged"
+  - name: fChargedEnergyRecoNeutral
+    type: float
+    description: "Fraction of charged hadronic energy reconstructed as neutral"
+  - name: fNeutralEnergyRecoCharged
+    type: float
+    description: "Fraction of neutral hadronic energy reconstructed as charged"
+  - name: fNeutralEnergyRecoNeutral
+    type: float
+    description: "Fraction of neutral hadronic energy reconstructed as neutral"
   - name: nPFOs
     type: uint32_t
     description: "Total number of Particle Flow Objects"

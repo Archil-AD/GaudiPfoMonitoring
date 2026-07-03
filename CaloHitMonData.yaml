@@ -39,3 +39,6 @@ members:
   - name: shortestIsolationDist
     type: float
     description: "Distance to the nearest neighboring hit"
+  - name: mcPdg
+    type: int32_t
+    description: "PDG code of the primary MC particle contributing to the hit"

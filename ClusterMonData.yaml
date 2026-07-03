@@ -6,6 +6,15 @@ members:
   - name: energy
     type: float
     description: "Reconstructed energy of the cluster"
+  - name: fNeutral
+    type: float
+    description: "Fraction of hadronic energy from neutral MC particles"
+  - name: fPhoton
+    type: float
+    description: "Fraction of hadronic energy from photons (MC)"
+  - name: fCharged
+    type: float
+    description: "Fraction of hadronic energy from charged MC particles"
   - name: nHits
     type: uint32_t
     description: "Total number of calorimeter hits in the cluster"
@@ -27,6 +36,9 @@ members:
   - name: startLayer
     type: uint32_t
     description: "Innermost pseudo-layer occupied by the cluster"
+  - name: showerStartLayer
+    type: uint32_t
+    description: "The pseudo-layer where the particle shower is estimated to begin, as determined by Pandora's shower start finding algorithm."
   - name: nLayers
     type: uint32_t
     description: "Number of layers spanned by the cluster"
@@ -72,6 +84,9 @@ members:
   - name: closeHitFraction
     type: float
     description: "Fraction of hits in this cluster that are close to the most energetic cluster, as defined in ProximityBasedMergingAlgorithm."
+  - name: fractionInCone
+    type: float
+    description: "Fraction of hits in this cluster (daughter) that fall within the cone of the most energetic cluster (parent), as calculated in ConeBasedMergingAlgorithm."
   - name: canBeMerged
     type: uint32_t
     description: "Flag indicating if the cluster is a candidate for merging based on ProximityBasedMergingAlgorithm criteria (MIP fraction and RMS)."
@@ -84,9 +99,12 @@ members:
   - name: hasAssociatedTrack
     type: uint32_t
     description: "Flag indicating if the cluster has at least one associated track."
-  - name: nRadiationLengthsBeforeShowerStart
+  - name: nRadiationLengths
     type: float
-    description: "Total number of radiation lengths before start of the cluster, computed layer-by-layer as in LCParticleIdPlugins::LCEmShowerId."
+    description: "Total number of radiation lengths spanned by the cluster, computed layer-by-layer as in LCParticleIdPlugins::LCEmShowerId."
+  - name: nRadiationLengthsBeforeClusterStart
+    type: float
+    description: "Total number of radiation lengths before the start of the cluster, computed layer-by-layer as in LCParticleIdPlugins::LCEmShowerId."
   - name: layer90RadLengths
     type: float
     description: "Total number of radiation lengths before longitudinal layer90, computed layer-by-layer as in LCParticleIdPlugins::LCEmShowerId."
