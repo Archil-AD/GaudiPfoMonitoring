@@ -26,11 +26,14 @@
 #include "DDRec/Vector3D.h"
 
 #include "EVENT/MCParticle.h"
+#include "edm4hep/MCParticle.h"
 
 #include "CaloHitMonDataCollection.h"
 #include "ClusterMonDataCollection.h"
 #include "EventMonDataCollection.h"
+#include "MCParticleMonDataCollection.h"
 #include "PfoMonDataCollection.h"
+
 
 #include <algorithm>
 #include <cmath>
@@ -53,7 +56,7 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
       m_nCorrectChargedHadronPfo(0), m_nWrongChargedHadronPfo(0),
       m_neutralHadronEnergyFractionCut(0.7), m_createPfoMonData(true),
       m_createClusterMonData(true), m_createEventMonData(true),
-      m_createCaloHitMonData(true),
+      m_createCaloHitMonData(true), m_createMCParticleMonData(true),
       m_isolatedCaloHitListName("IsolatedCaloHitList"),
       m_isolationCutDistanceFine2(25.f * 25.f),
       m_isolationCutDistanceCoarse2(200.f * 200.f),
@@ -186,6 +189,26 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     }
   }
 
+  // 6. Retrieve or Create the MCParticle monitoring collection
+  GaudiPfoMonitoring::MCParticleMonDataCollection *mcParticleColl = nullptr;
+  if (m_createMCParticleMonData) {
+    if (eventSvc
+            ->retrieveObject("/Event/MCParticleMonitoringData",
+                             (DataObject *&)mcParticleColl)
+            .isFailure()) {
+      mcParticleColl = new GaudiPfoMonitoring::MCParticleMonDataCollection();
+      if (eventSvc
+              ->registerObject("/Event/MCParticleMonitoringData", mcParticleColl)
+              .isFailure()) {
+        std::cout << "PfoMonitoringAlgorithm: Could not register "
+                     "MCParticleMonitoringData"
+                  << std::endl;
+        delete mcParticleColl;
+        return STATUS_CODE_FAILURE;
+      }
+    }
+  }
+
   m_trackMcPfoTargets.clear();
 
   //--------------------------------------------------------------------------------------------------------------
@@ -203,7 +226,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
                            PandoraContentApi::GetCurrentList(*this, pPfoList));
 
   if (pPfoList->empty()) {
-    // If this prints, your Pandora XML is calling this algorithm too early
+    // If this prints, Pandora XML is calling this algorithm too early
     // or the "Current PFO List" is not set correctly.
     std::cout << "PfoMonitoringAlgorithm: Current PFO list is EMPTY."
               << std::endl;
@@ -217,7 +240,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       PandoraContentApi::GetCurrentList(*this, pAllClusters));
 
   if (pAllClusters->empty()) {
-    // If this prints, your Pandora XML is calling this algorithm too early
+    // If this prints, Pandora XML is calling this algorithm too early
     // or the "Current cluster List" is not set correctly.
     std::cout << "PfoMonitoringAlgorithm: Current Cluster list is EMPTY."
               << std::endl;
@@ -300,7 +323,15 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         clusteredHitSet.insert(pHit);
       }
     }
+    // add isolated hits attached to this cluster
+    const CaloHitList &isolatedHits = pCluster->GetIsolatedCaloHitList();
+    for (const CaloHit *const pHit : isolatedHits) {
+      clusteredHitSet.insert(pHit);
+    }
   }
+
+  // Track MC particles matched to reconstructed PFOs
+  std::unordered_set<const MCParticle *> mcMatchedToPfo;
 
   //--------------------------------------------------------------------------------------------------------------
   // Fill PFO monitoring data from pPfoList
@@ -410,6 +441,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
           pfoData.setMcPdg(pMCParticle->GetParticleId());
           pfoData.setMcEnergy(pMCParticle->GetEnergy());
+          mcMatchedToPfo.insert(pMCParticle);
 
           // Opening angle between PFO and MC particle
           const CartesianVector &mcMomentum(pMCParticle->GetMomentum());
@@ -479,8 +511,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
           pfoData.setMcPdg(pBestMCMatch->GetParticleId());
           pfoData.setMcEnergy(pBestMCMatch->GetEnergy());
+          mcMatchedToPfo.insert(pBestMCMatch);
 
-          // Opening angle (cosine) between PFO and MC particle
+          // Opening angle alpha between PFO and MC particle
           const CartesianVector &mcMomentum(pBestMCMatch->GetMomentum());
           if (momentum.GetMagnitudeSquared() >
                   std::numeric_limits<float>::epsilon() &&
@@ -707,6 +740,42 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       clusData.setMinGenericDistance(clusMinGenericDist);
       clusData.setMinParallelDistance(clusMinParallelDist);
 
+      // --- chi and chi0 (mirroring ProximityBasedMergingAlgorithm track
+      // consistency check) --- Using the most energetic cluster as the assumed
+      // parent, if it has track associations. chi = (daughterEnergy +
+      // parentEnergy - trackEnergySum) / sigmaE chi0 = (parentEnergy -
+      // trackEnergySum) / sigmaE
+      float clusChi = -1.f;
+      float clusChi0 = -1.f;
+      if (hasMostEnergeticCluster) {
+        const TrackList &parentTrackList(
+            pMostEnergeticCluster->GetAssociatedTrackList());
+        if (!parentTrackList.empty()) {
+          float trackEnergySum = 0.f;
+          for (const Track *const pTrack : parentTrackList) {
+            trackEnergySum += pTrack->GetEnergyAtDca();
+          }
+          if (trackEnergySum > 0.f) {
+            const float hadronicEnergyResolution(
+                this->GetPandora()
+                    .GetSettings()
+                    ->GetHadronicEnergyResolution());
+            const float sigmaE(hadronicEnergyResolution * trackEnergySum /
+                               std::sqrt(trackEnergySum));
+            if (sigmaE > std::numeric_limits<float>::epsilon()) {
+              const float parentEnergy(
+                  pMostEnergeticCluster->GetHadronicEnergy());
+              const float clusterEnergy(pCluster->GetHadronicEnergy());
+              const float clusterEnergySum(clusterEnergy + parentEnergy);
+              clusChi = (clusterEnergySum - trackEnergySum) / sigmaE;
+              clusChi0 = (parentEnergy - trackEnergySum) / sigmaE;
+            }
+          }
+        }
+      }
+      clusData.setChi(clusChi);
+      clusData.setChi0(clusChi0);
+
       // --- layer span and shower layer span (mirroring ProximityBasedMerging)
       // --- Parent = most energetic cluster, daughter = current cluster
       int clusLayerSpan = std::numeric_limits<int>::min();
@@ -791,7 +860,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   // Fill calo hit monitoring data from all hits
   if (m_createCaloHitMonData && caloHitColl) {
     const CaloHitList *pCaloHitList = nullptr;
-    if (PandoraContentApi::GetCurrentList(*this, pCaloHitList) !=
+    if (PandoraContentApi::GetList(*this, "CaloHits", pCaloHitList) !=
             STATUS_CODE_SUCCESS ||
         !pCaloHitList)
       return STATUS_CODE_SUCCESS;
@@ -947,19 +1016,34 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     float neutralEnergyRecoNeutral = 0.f;
 
     // all CaloHits
-    const CaloHitList *pCurrentCaloHitList = nullptr;
-    if (PandoraContentApi::GetCurrentList(*this, pCurrentCaloHitList) ==
+    const CaloHitList *pAllCaloHitList = nullptr;
+    if (PandoraContentApi::GetList(*this, "CaloHits", pAllCaloHitList) ==
             STATUS_CODE_SUCCESS &&
-        pCurrentCaloHitList) {
-      for (const CaloHit *const pCaloHit : *pCurrentCaloHitList) {
+        pAllCaloHitList) {
+      for (const CaloHit *const pCaloHit : *pAllCaloHitList) {
         // determine if the hit is from charged or neutral particle
         const MCParticle *const pMCParticle(
             MCParticleHelper::GetMainMCParticle(pCaloHit));
         const MCParticle *const pMCPfoTarget(pMCParticle->GetPfoTarget());
         const int pdgCode(pMCPfoTarget->GetParticleId());
         const int charge(PdgTable::GetParticleCharge(pdgCode));
-        (charge == 0) ? neutralEnergy += pCaloHit->GetHadronicEnergy()
-                      : chargedEnergy += pCaloHit->GetHadronicEnergy();
+        if ((charge != 0) || (std::abs(pdgCode) == LAMBDA) ||
+            (std::abs(pdgCode) == K_SHORT)) {
+          // Charged particle (or neutral hadron that decays to charged)
+          if (m_trackMcPfoTargets.end() ==
+                  std::find(m_trackMcPfoTargets.begin(),
+                            m_trackMcPfoTargets.end(), pMCParticle) &&
+              m_createPfoMonData) {
+            // Charged particle NOT matched to any reconstructed track
+            // classified as neutral (same as ClusterEnergyFractions)
+            neutralEnergy += pCaloHit->GetHadronicEnergy();
+          } else {
+            chargedEnergy += pCaloHit->GetHadronicEnergy();
+          }
+        } else {
+          // Truly neutral particle
+          neutralEnergy += pCaloHit->GetHadronicEnergy();
+        }
         // isolated hits
         if (pCaloHit->IsIsolated() &&
             clusteredHitSet.count(pCaloHit)) // clustered
@@ -990,26 +1074,28 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       }
     }
 
-    // Compute charged/neutral energies from clusters 
+    // Compute charged/neutral energies from clusters
     if (m_createClusterMonData) {
       for (const auto &clusData : *clusterColl) {
         // consider only clusters that can from a PFO
-        if (!m_createPfoMonData && clusData.getEnergy() < 0.25) continue;
-        if(m_createClusterMonData && clusData.getIsInPfo() == 0) continue;
+        if (!m_createPfoMonData && clusData.getEnergy() < 0.25)
+          continue;
+        if (m_createClusterMonData && clusData.getIsInPfo() == 0)
+          continue;
         const float clusEnergy(clusData.getEnergy());
         const float fCh(clusData.getFCharged());
         const float fNe(clusData.getFNeutral());
         const float fPh(clusData.getFPhoton());
-        
+
         // charged cluster
         if (clusData.getHasAssociatedTrack()) {
-          chargedEnergyRecoCharged  += clusEnergy * fCh;
-          neutralEnergyRecoCharged  += clusEnergy * (fNe + fPh);
+          chargedEnergyRecoCharged += clusEnergy * fCh;
+          neutralEnergyRecoCharged += clusEnergy * (fNe + fPh);
         }
         // neutral cluster
         else {
-          chargedEnergyRecoNeutral  += clusEnergy * fCh;
-          neutralEnergyRecoNeutral  += clusEnergy * (fNe + fPh);
+          chargedEnergyRecoNeutral += clusEnergy * fCh;
+          neutralEnergyRecoNeutral += clusEnergy * (fNe + fPh);
         }
       }
     }
@@ -1044,6 +1130,46 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
             : -1.f);
     evtData.setNClusters(static_cast<unsigned int>(pAllClusters->size()));
     evtData.setNPFOs(static_cast<unsigned int>(pPfoList->size()));
+  }
+  //--------------------------------------------------------------------------------------------------------------
+
+  //--------------------------------------------------------------------------------------------------------------
+  // Fill MCParticle monitoring data from Pandora's MC particle list
+  if (m_createMCParticleMonData && mcParticleColl && pMCParticleList) {
+    // Build a set of MC particles that left at least one calo hit
+    std::unordered_set<const MCParticle *> mcWithCaloHits;
+    {
+      const CaloHitList *pMonCaloHitList = nullptr;
+      if (PandoraContentApi::GetList(*this, "CaloHits", pMonCaloHitList) ==
+              STATUS_CODE_SUCCESS &&
+          pMonCaloHitList) {
+        for (const CaloHit *const pCaloHit : *pMonCaloHitList) {
+          try {
+            const MCParticle *const pMC(
+                MCParticleHelper::GetMainMCParticle(pCaloHit));
+            if (pMC)
+              mcWithCaloHits.insert(pMC);
+          } catch (StatusCodeException &) {
+          }
+        }
+      }
+    }
+
+    for (const MCParticle *const pMC : *pMCParticleList) {
+      //edm4hep::MCParticle *pMCParticle = dynamic_cast<edm4hep::MCParticle*> (pMC->GetUid());
+      auto &mcData = mcParticleColl->create();
+      mcData.setPdg(pMC->GetParticleId());
+      mcData.setEnergy(pMC->GetEnergy());
+      const CartesianVector &mcMom(pMC->GetMomentum());
+      mcData.setPx(mcMom.GetX());
+      mcData.setPy(mcMom.GetY());
+      mcData.setPz(mcMom.GetZ());
+      // generatorStatus is not available from Pandora MCParticle;
+      // set to 0 (unknown). Retrieve from edm4hep if needed.
+      mcData.setGeneratorStatus(0);
+      mcData.setHasCaloHit(mcWithCaloHits.count(pMC) ? 1u : 0u);
+      mcData.setHasMatchedPfo(mcMatchedToPfo.count(pMC) ? 1u : 0u);
+    }
   }
   //--------------------------------------------------------------------------------------------------------------
 
@@ -1089,9 +1215,9 @@ void PfoMonitoringAlgorithm::ClusterEnergyFractions(
 
       if ((charge != 0) || (std::abs(pdgCode) == LAMBDA) ||
           (std::abs(pdgCode) == K_SHORT)) {
-        if (m_trackMcPfoTargets.end() ==
-                std::find(m_trackMcPfoTargets.begin(),
-                          m_trackMcPfoTargets.end(), pMCParticle) &&
+        if (m_trackMcPfoTargets.end() == std::find(m_trackMcPfoTargets.begin(),
+                                                   m_trackMcPfoTargets.end(),
+                                                   pMCParticle) &&
             m_createPfoMonData) {
           neutralEnergy += pCaloHit->GetHadronicEnergy();
         } else {
@@ -1435,6 +1561,11 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "CreateCaloHitMonData",
                            m_createCaloHitMonData));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "CreateMCParticleMonData",
+                           m_createMCParticleMonData));
 
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,

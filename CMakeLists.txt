@@ -112,6 +112,20 @@ add_custom_command(
     VERBATIM
 )
 
+# --- MCParticleMonData ---
+set(MCPARTICLE_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/MCParticleMonData.yaml)
+
+add_custom_command(
+    OUTPUT
+        ${PFO_MON_GENERATED_DIR}/MCParticleMonData.h
+        ${PFO_MON_GENERATED_DIR}/MCParticleMonDataCollection.h
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PFO_MON_GENERATED_DIR}
+    COMMAND python3 ${PFO_MON_GENERATOR} ${MCPARTICLE_MON_YAML} ${PFO_MON_GENERATED_DIR}
+    DEPENDS ${MCPARTICLE_MON_YAML} ${PFO_MON_GENERATOR}
+    COMMENT "Generating MCParticleMonData headers from YAML definition..."
+    VERBATIM
+)
+
 # Create a custom target to ensure generation runs before compilation
 add_custom_target(generate_pfo_mon_data DEPENDS
     ${PFO_MON_GENERATED_DIR}/PfoMonData.h
@@ -122,6 +136,8 @@ add_custom_target(generate_pfo_mon_data DEPENDS
     ${PFO_MON_GENERATED_DIR}/EventMonDataCollection.h
     ${PFO_MON_GENERATED_DIR}/CaloHitMonData.h
     ${PFO_MON_GENERATED_DIR}/CaloHitMonDataCollection.h
+    ${PFO_MON_GENERATED_DIR}/MCParticleMonData.h
+    ${PFO_MON_GENERATED_DIR}/MCParticleMonDataCollection.h
 )
 
 # ============================================================================

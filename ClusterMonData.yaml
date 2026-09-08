@@ -117,3 +117,9 @@ members:
   - name: radial90
     type: float
     description: "Radius (in mm) containing 90% of the cluster's electromagnetic energy, computed from hit energy and radial distance as in LCParticleIdPlugins::LCEmShowerId."
+  - name: chi
+    type: float
+    description: "Chi compatibility between cluster+mostEnergetic (assumed parent) energy sum and track energy of the most energetic cluster, as defined in ProximityBasedMergingAlgorithm: (clusterEnergy + parentEnergy - trackEnergySum) / sigmaE."
+  - name: chi0
+    type: float
+    description: "Chi0 compatibility of the most energetic cluster's (assumed parent) energy with its own track energy, as defined in ProximityBasedMergingAlgorithm: (parentEnergy - trackEnergySum) / sigmaE."

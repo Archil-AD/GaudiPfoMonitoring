@@ -4,6 +4,7 @@
 #include "Gaudi/Algorithm.h"
 #include "k4FWCore/DataHandle.h"
 #include "k4FWCore/DataWrapper.h"
+#include "edm4hep/MCParticleCollection.h"
 
 #include "TFile.h"
 #include "TTree.h"
@@ -114,6 +115,18 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float>        m_clus_showerMaxRadLengths;
         mutable std::vector<float>        m_clus_radial90;
         mutable std::vector<float>        m_clus_fractionOfEnergyAboveHighRadLengths;
+        mutable std::vector<float>        m_clus_chi;
+        mutable std::vector<float>        m_clus_chi0;
+
+        // MCParticle branches (one entry per MC particle)
+        mutable std::vector<int>          m_mc_pdg;
+        mutable std::vector<float>        m_mc_energy;
+        mutable std::vector<float>        m_mc_px;
+        mutable std::vector<float>        m_mc_py;
+        mutable std::vector<float>        m_mc_pz;
+        mutable std::vector<int>          m_mc_generatorStatus;
+        mutable std::vector<unsigned int> m_mc_hasCaloHit;
+        mutable std::vector<unsigned int> m_mc_hasMatchedPfo;
 
         // CaloHit branches (one entry per calo hit)
         mutable std::vector<float>        m_hit_energy;
@@ -130,6 +143,9 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float>        m_hit_shortestIsolationDist;
         mutable std::vector<int>          m_hit_mcPdg;
 
+        /// Handle for mc particles (input collection)
+        mutable k4FWCore::DataHandle<edm4hep::MCParticleCollection> m_mcParticleHandle{"MCParticles", Gaudi::DataHandle::Reader,
+                                                                            this};
         ServiceHandle<IDataProviderSvc> m_eventDataSvc;
     };
 }

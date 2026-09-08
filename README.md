@@ -9,7 +9,7 @@ In addition, reconstructed PFO variables are included for performance evaluation
 
 The framework consists of two Gaudi algorithms:
 
-1. **`PfoMonitoringAlgorithm`** (Pandora algorithm, registered as `"PfoMonitoring"`): Runs within the Pandora event processing chain. It extracts CaloHit, Cluster, PFO, and event-level monitoring data from the current Pandora lists and stores them in the Gaudi Event Store as custom collections.
+1. **`PfoMonitoringAlgorithm`** (Pandora algorithm, registered as `"PfoMonitoring"`): Runs within the Pandora event processing chain. It extracts CaloHit, Cluster, PFO, MC particle, and event-level monitoring data from the current Pandora lists and stores them in the Gaudi Event Store as custom collections.
 
 2. **`SavePfoMonitoringTree`** (Gaudi algorithm): Reads the monitoring collections from the Event Store at the end of each event and writes them to a ROOT TTree named `events` in the output file `GaudiPfoMonitoring.root`.
 
@@ -41,6 +41,7 @@ The monitoring data classes and their Gaudi-compatible collections are auto-gene
 | `ClusterMonData.yaml` | `ClusterMonData` | 1002 |
 | `EventMonData.yaml` | `EventMonData` | 1003 |
 | `CaloHitMonData.yaml` | `CaloHitMonData` | 1004 |
+| `MCParticleMonData.yaml` | `MCParticleMonData` | 1005 |
 
 ## Configurable Parameters
 
@@ -53,6 +54,7 @@ The `PfoMonitoringAlgorithm` exposes the following configurable parameters via P
 | `CreateClusterMonData` | bool | `true` | Enable/disable cluster-level monitoring |
 | `CreateEventMonData` | bool | `true` | Enable/disable event-level monitoring |
 | `CreateCaloHitMonData` | bool | `true` | Enable/disable calorimeter hit-level monitoring |
+| `CreateMCParticleMonData` | bool | `true` | Enable/disable MC particle-level monitoring |
 
 ### Neutral hadron classification
 | Parameter | Type | Default | Description |
@@ -96,7 +98,7 @@ The `PfoMonitoringAlgorithm` exposes the following configurable parameters via P
 
 ## Monitoring Variables
 
-The framework monitors four main categories of data, each provided as a TTree for analysis.
+The framework monitors five main categories of data, each provided as a TTree for analysis.
 
 ### 1. Calorimeter Hits (`CaloHitMonData`)
 Monitors individual hit properties and the results of Pandora's hit-level preprocessing.
@@ -145,6 +147,8 @@ Describes the topological clusters formed from hits, with variables used for sho
 * **showerMaxRadLengths**: Number of radiation lengths before the shower maximum layer (the layer with the highest energy deposit), computed as in `LCParticleIdPlugins::LCEmShowerId`.
 * **fractionOfEnergyAboveHighRadLengths**: Fraction of electromagnetic energy deposited above a configurable high radiation length threshold, computed as `energyAboveHighRadLengths / totalElectromagneticEnergy` as in `LCParticleIdPlugins::LCEmShowerId`.
 * **radial90**: Radius (in mm) containing 90% of the cluster's electromagnetic energy, computed from hit energy and radial distance as in `LCParticleIdPlugins::LCEmShowerId`.
+* **chi**: Chi compatibility between this cluster and the most energetic cluster (assumed parent) when the most energetic cluster has track associations, calculated as in `ProximityBasedMergingAlgorithm`: `(clusterEnergy + parentEnergy - trackEnergySum) / sigmaE`. A value < `MaxTrackClusterChi` (default 2.5) indicates this cluster is energetically compatible with the parent's tracks, suggesting it should be merged. Set to -1 if the most energetic cluster has no tracks or if this cluster IS the most energetic cluster.
+* **chi0**: Chi0 compatibility of the most energetic cluster's energy with its own track energy, calculated as in `ProximityBasedMergingAlgorithm`: `(parentEnergy - trackEnergySum) / sigmaE`. The chi² difference criterion `chi² - chi0² < MaxTrackClusterDChi2` (default 1.0) is used to check if the addition of this cluster's energy significantly worsens the energy-track compatibility. Set to -1 if the most energetic cluster has no tracks.
 
 ### 3. Particle Flow Objects (`PfoMonData`)
 The final reconstructed particles (PFOs).
@@ -175,6 +179,15 @@ Global metrics for energy flow and reconstruction efficiency per event.
     * `fNeutralEnergyRecoNeutral`: Fraction of neutral hadronic energy reconstructed as neutral.
 * **nClusters / nPFOs**: Total number of reconstructed objects.
 
+### 5. MC Particles (`MCParticleMonData`)
+Truth-level information for every MC particle in Pandora's current MC particle list, used to study reconstruction efficiency and confusion at the truth level.
+* **pdg**: PDG code of the MC particle (from `pandora::MCParticle::GetParticleId()`).
+* **energy**: Total energy of the MC particle (GeV).
+* **px, py, pz**: Cartesian components of the MC particle momentum (from `pandora::MCParticle::GetMomentum()`).
+* **generatorStatus**: Generator status of the MC particle. Not directly available from the `pandora::MCParticle` interface, so it is currently set to `0` (unknown) in this collection; for the proper generator status code, retrieve it from the upstream `edm4hep::MCParticleCollection` via the `MCParticles` handle used by `SavePfoMonitoringTree`.
+* **hasCaloHit**: Flag (0 or 1) indicating whether the MC particle is the main MC particle of at least one reconstructed calorimeter hit in Pandora's `CaloHits` list, evaluated via `MCParticleHelper::GetMainMCParticle(pCaloHit)`.
+* **hasMatchedPfo**: Flag (0 or 1) indicating whether the MC particle was matched to a reconstructed PFO during reconstruction — i.e. it was the main MC particle of the PFO's track (charged PFOs) or the best MC match of the PFO's clusters (neutral PFOs).
+
 ## Output ROOT Tree Structure
 
 The output file `GaudiPfoMonitoring.root` contains a single TTree named `events` with the following branch naming convention:
@@ -185,6 +198,7 @@ The output file `GaudiPfoMonitoring.root` contains a single TTree named `events`
 | `pfo_*` | PFO-level vectors | N entries per event (one per PFO) |
 | `clus_*` | Cluster-level vectors | N entries per event (one per cluster) |
 | `hit_*` | CaloHit-level vectors | N entries per event (one per hit) |
+| `mc_*` | MC particle-level vectors | N entries per event (one per MC particle) |
 
 ## Usage
 
@@ -197,6 +211,7 @@ The output file `GaudiPfoMonitoring.root` contains a single TTree named `events`
   <CreateClusterMonData>true</CreateClusterMonData>
   <CreateEventMonData>true</CreateEventMonData>
   <CreateCaloHitMonData>true</CreateCaloHitMonData>
+  <CreateMCParticleMonData>true</CreateMCParticleMonData>
 </algorithm>
 ```
 
@@ -228,4 +243,4 @@ make -j$(nproc)
 make install
 ```
 
-The build system uses YAML-based code generation: the four YAML definition files (`PfoMonData.yaml`, `ClusterMonData.yaml`, `EventMonData.yaml`, `CaloHitMonData.yaml`) are processed by `cmake/generate_pfo_monitoring.py` to produce C++ headers for the data classes and their Gaudi-compatible collections.
+The build system uses YAML-based code generation: the five YAML definition files (`PfoMonData.yaml`, `ClusterMonData.yaml`, `EventMonData.yaml`, `CaloHitMonData.yaml`, `MCParticleMonData.yaml`) are processed by `cmake/generate_pfo_monitoring.py` to produce C++ headers for the data classes and their Gaudi-compatible collections.

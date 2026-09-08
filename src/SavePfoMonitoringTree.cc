@@ -3,7 +3,9 @@
 #include "CaloHitMonDataCollection.h"
 #include "ClusterMonDataCollection.h"
 #include "EventMonDataCollection.h"
+#include "MCParticleMonDataCollection.h"
 #include "PfoMonDataCollection.h"
+#include "TLorentzVector.h"
 
 DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
 
@@ -17,8 +19,8 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_pfo_nHits(), m_pfo_nMipLikeHits(), m_pfo_nEcalHits(),
       m_pfo_nMipEcalHits(), m_pfo_nHcalHits(), m_pfo_nMipHcalHits(),
       m_pfo_minClusterDistance(), m_pfo_startLayer(), m_pfo_nLayers(),
-      m_pfo_mcPdg(), // Keep mcPdg as it exists in PfoMonData
-      m_pfo_mcEnergy(), m_evt_eventNumber(0),
+      m_pfo_mcPdg(), m_pfo_mcEnergy(),
+      m_evt_eventNumber(0),
       m_evt_nClusteredNonIsolatedHits(0), m_evt_nClusteredIsolatedHits(0),
       m_evt_nUnclusteredIsolatedHits(0),
       m_evt_clusteredIsolatedEnergy(0.f), m_evt_clusteredNonIsolatedEnergy(0.f),
@@ -33,7 +35,9 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_clus_distToMostEnergeticClusterCentroid(), m_clus_fractionInCone(),
       m_clus_minInnerLayerSeparation(), m_clus_minGenericDistance(),
       m_clus_minParallelDistance(), m_clus_layerSpan(), m_clus_showerLayerSpan(), m_clus_contactFraction(), m_clus_closeHitFraction(),
-      m_clus_canBeMerged(), m_clus_rms(), m_clus_dCosR(), m_clus_hasAssociatedTrack(), m_clus_fNeutral(), m_clus_fPhoton(), m_clus_fCharged(), m_clus_nRadiationLengths(), m_clus_nRadiationLengthsBeforeClusterStart(), m_clus_layer90RadLengths(), m_clus_showerMaxRadLengths(), m_clus_radial90(), m_clus_fractionOfEnergyAboveHighRadLengths(), m_clus_mcPdg(), m_clus_mcEnergy(),
+      m_clus_canBeMerged(), m_clus_rms(), m_clus_dCosR(), m_clus_hasAssociatedTrack(), m_clus_fNeutral(), m_clus_fPhoton(), m_clus_fCharged(), m_clus_nRadiationLengths(), m_clus_nRadiationLengthsBeforeClusterStart(), m_clus_layer90RadLengths(), m_clus_showerMaxRadLengths(), m_clus_radial90(), m_clus_fractionOfEnergyAboveHighRadLengths(), m_clus_chi(), m_clus_chi0(), m_clus_mcPdg(), m_clus_mcEnergy(),
+      m_mc_pdg(), m_mc_energy(), m_mc_px(), m_mc_py(), m_mc_pz(), m_mc_generatorStatus(),
+      m_mc_hasCaloHit(), m_mc_hasMatchedPfo(),
       m_hit_energy(),
       m_hit_pseudoLayer(), m_hit_cellLengthScale(), m_hit_isIsolated(),
       m_hit_positionX(), m_hit_positionY(),
@@ -59,7 +63,6 @@ StatusCode SavePfoMonitoringTree::initialize() {
 
   m_outputFile->cd();
   m_outputTree = new TTree("events", "events");
-  // Event-level summary branches (one scalar per event)
   m_outputTree->Branch("evt_eventNumber", &m_evt_eventNumber,
                        "evt_eventNumber/I");
   m_outputTree->Branch("evt_nClusteredNonIsolatedHits",
@@ -92,7 +95,6 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("evt_nClusters", &m_evt_nClusters, "evt_nClusters/i");
   m_outputTree->Branch("evt_nPFOs", &m_evt_nPFOs, "evt_nPFOs/i");
 
-  // Set up PFO branches
   m_outputTree->Branch("pfo_energy", &m_pfo_energy);
   m_outputTree->Branch("pfo_pdg", &m_pfo_pdg);
   m_outputTree->Branch("pfo_fNeutral", &m_pfo_fNeutral);
@@ -114,10 +116,9 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("pfo_minClusterDistance", &m_pfo_minClusterDistance);
   m_outputTree->Branch("pfo_startLayer", &m_pfo_startLayer);
   m_outputTree->Branch("pfo_nLayers", &m_pfo_nLayers);
-  m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg); // Keep mcPdg branch
+  m_outputTree->Branch("pfo_mcPdg", &m_pfo_mcPdg);
   m_outputTree->Branch("pfo_mcEnergy", &m_pfo_mcEnergy);
 
-  // Cluster branches (one entry per cluster in pAllClusters)
   m_outputTree->Branch("clus_energy", &m_clus_energy);
   m_outputTree->Branch("clus_nHits", &m_clus_nHits);
   m_outputTree->Branch("clus_nMipLikeHits", &m_clus_nMipLikeHits);
@@ -139,7 +140,7 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_minInnerLayerSeparation", &m_clus_minInnerLayerSeparation);
   m_outputTree->Branch("clus_minGenericDistance", &m_clus_minGenericDistance);
   m_outputTree->Branch("clus_minParallelDistance", &m_clus_minParallelDistance);
-  m_outputTree->Branch("clus_layerSpan",      &m_clus_layerSpan);
+  m_outputTree->Branch("clus_layerSpan", &m_clus_layerSpan);
   m_outputTree->Branch("clus_showerLayerSpan", &m_clus_showerLayerSpan);
   m_outputTree->Branch("clus_contactFraction", &m_clus_contactFraction);
   m_outputTree->Branch("clus_closeHitFraction", &m_clus_closeHitFraction);
@@ -157,8 +158,9 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_fPhoton", &m_clus_fPhoton);
   m_outputTree->Branch("clus_fCharged", &m_clus_fCharged);
   m_outputTree->Branch("clus_hasAssociatedTrack", &m_clus_hasAssociatedTrack);
+  m_outputTree->Branch("clus_chi", &m_clus_chi);
+  m_outputTree->Branch("clus_chi0", &m_clus_chi0);
 
-  // CaloHit branches (one entry per calo hit)
   m_outputTree->Branch("hit_energy", &m_hit_energy);
   m_outputTree->Branch("hit_pseudoLayer", &m_hit_pseudoLayer);
   m_outputTree->Branch("hit_cellLengthScale", &m_hit_cellLengthScale);
@@ -174,6 +176,14 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("hit_shortestIsolationDist",
                        &m_hit_shortestIsolationDist);
   m_outputTree->Branch("hit_mcPdg", &m_hit_mcPdg);
+
+  m_outputTree->Branch("mc_pdg", &m_mc_pdg);
+  m_outputTree->Branch("mc_energy", &m_mc_energy);
+  m_outputTree->Branch("mc_px", &m_mc_px);
+  m_outputTree->Branch("mc_py", &m_mc_py);
+  m_outputTree->Branch("mc_pz", &m_mc_pz);
+  m_outputTree->Branch("mc_hasCaloHit", &m_mc_hasCaloHit);
+  m_outputTree->Branch("mc_hasMatchedPfo", &m_mc_hasMatchedPfo);
 
   info() << "Successfully initialized and opened ROOT file: "
             "GaudiPfoMonitoring.root"
@@ -203,10 +213,9 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_pfo_minClusterDistance.clear();
   m_pfo_startLayer.clear();
   m_pfo_nLayers.clear();
-  m_pfo_mcPdg.clear(); // Clear mcPdg
+  m_pfo_mcPdg.clear();
   m_pfo_mcEnergy.clear();
 
-  // Reset event-level scalars
   m_evt_eventNumber = 0;
   m_evt_nClusteredNonIsolatedHits = 0;
   m_evt_nClusteredIsolatedHits = 0;
@@ -226,7 +235,6 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_evt_nClusters = 0;
   m_evt_nPFOs = 0;
 
-  // Clear cluster vectors
   m_clus_energy.clear();
   m_clus_nHits.clear();
   m_clus_nMipLikeHits.clear();
@@ -261,12 +269,22 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_showerMaxRadLengths.clear();
   m_clus_radial90.clear();
   m_clus_fractionOfEnergyAboveHighRadLengths.clear();
+  m_clus_chi.clear();
+  m_clus_chi0.clear();
   m_clus_fNeutral.clear();
   m_clus_fPhoton.clear();
   m_clus_fCharged.clear();
   m_clus_hasAssociatedTrack.clear();
 
-  // Clear calo hit vectors
+  m_mc_pdg.clear();
+  m_mc_energy.clear();
+  m_mc_px.clear();
+  m_mc_py.clear();
+  m_mc_pz.clear();
+  m_mc_generatorStatus.clear();
+  m_mc_hasCaloHit.clear();
+  m_mc_hasMatchedPfo.clear();
+
   m_hit_energy.clear();
   m_hit_pseudoLayer.clear();
   m_hit_cellLengthScale.clear();
@@ -281,14 +299,12 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_hit_shortestIsolationDist.clear();
   m_hit_mcPdg.clear();
 
-  // Retrieve the PFO collection from the Event Store
   const GaudiPfoMonitoring::PfoMonDataCollection *pfoDataBuffer = nullptr;
   if (eventSvc()
           ->retrieveObject("/Event/PfoMonitoringData",
                            (DataObject *&)pfoDataBuffer)
           .isSuccess()) {
     debug() << "Saving " << pfoDataBuffer->size() << " PFOs to Tree." << endmsg;
-
     for (const auto &pfoData : *pfoDataBuffer) {
       m_pfo_energy.push_back(pfoData.getEnergy());
       m_pfo_pdg.push_back(pfoData.getPdg());
@@ -315,21 +331,15 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_pfo_mcEnergy.push_back(pfoData.getMcEnergy());
     }
   } else {
-    warning()
-        << "PfoMonitoringData not found. Tree will have empty branches for "
-           "this event."
-        << endmsg;
+    warning() << "PfoMonitoringData not found." << endmsg;
   }
 
-  // Retrieve the cluster collection from the Event Store
-  const GaudiPfoMonitoring::ClusterMonDataCollection *clusterDataBuffer =
-      nullptr;
+  const GaudiPfoMonitoring::ClusterMonDataCollection *clusterDataBuffer = nullptr;
   if (eventSvc()
           ->retrieveObject("/Event/ClusterMonitoringData",
                            (DataObject *&)clusterDataBuffer)
           .isSuccess()) {
-    debug() << "Saving " << clusterDataBuffer->size() << " clusters to Tree."
-            << endmsg;
+    debug() << "Saving " << clusterDataBuffer->size() << " clusters to Tree." << endmsg;
     for (const auto &clusData : *clusterDataBuffer) {
       m_clus_energy.push_back(clusData.getEnergy());
       m_clus_nHits.push_back(clusData.getNHits());
@@ -345,8 +355,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_passPhotonId.push_back(clusData.getPassPhotonId());
       m_clus_minClusterDistance.push_back(clusData.getMinClusterDistance());
       m_clus_isInPfo.push_back(clusData.getIsInPfo());
-      m_clus_distToMostEnergeticClusterCentroid.push_back(
-          clusData.getDistToMostEnergeticClusterCentroid());
+      m_clus_distToMostEnergeticClusterCentroid.push_back(clusData.getDistToMostEnergeticClusterCentroid());
       m_clus_mcPdg.push_back(clusData.getMcPdg());
       m_clus_mcEnergy.push_back(clusData.getMcEnergy());
       m_clus_minInnerLayerSeparation.push_back(clusData.getMinInnerLayerSeparation());
@@ -366,6 +375,8 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_radial90.push_back(clusData.getRadial90());
       m_clus_layer90RadLengths.push_back(clusData.getLayer90RadLengths());
       m_clus_fractionOfEnergyAboveHighRadLengths.push_back(clusData.getFractionOfEnergyAboveHighRadLengths());
+      m_clus_chi.push_back(clusData.getChi());
+      m_clus_chi0.push_back(clusData.getChi0());
       m_clus_fNeutral.push_back(clusData.getFNeutral());
       m_clus_fPhoton.push_back(clusData.getFPhoton());
       m_clus_fCharged.push_back(clusData.getFCharged());
@@ -375,7 +386,6 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
     warning() << "ClusterMonitoringData not found for this event." << endmsg;
   }
 
-  // Retrieve the event-level summary from the Event Store
   const GaudiPfoMonitoring::EventMonDataCollection *eventDataBuffer = nullptr;
   if (eventSvc()
           ->retrieveObject("/Event/EventMonitoringData",
@@ -398,36 +408,32 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
     m_evt_fChargedEnergyRecoNeutral = evtData.getFChargedEnergyRecoNeutral();
     m_evt_fNeutralEnergyRecoCharged = evtData.getFNeutralEnergyRecoCharged();
     m_evt_fNeutralEnergyRecoNeutral = evtData.getFNeutralEnergyRecoNeutral();
-    m_evt_nUnclusteredNonIsolatedHits =
-        evtData.getNUnclusteredNonIsolatedHits();
+    m_evt_nUnclusteredNonIsolatedHits = evtData.getNUnclusteredNonIsolatedHits();
     m_evt_nClusters = evtData.getNClusters();
     m_evt_nPFOs = evtData.getNPFOs();
-    debug() << "Event summary: event=" << m_evt_eventNumber
-            << " clusteredNonIsolatedHits=" << m_evt_nClusteredNonIsolatedHits
-            << " clusteredIsolatedHits=" << m_evt_nClusteredIsolatedHits
-            << " unclusteredIsolatedHits=" << m_evt_nUnclusteredIsolatedHits
-            << " unclusteredNonIsolatedHits="
-            << m_evt_nUnclusteredNonIsolatedHits
-            << " clusteredIsolatedEnergy=" << m_evt_clusteredIsolatedEnergy
-            << " clusteredNonIsolatedEnergy=" << m_evt_clusteredNonIsolatedEnergy
-            << " unclusteredIsolatedEnergy=" << m_evt_unclusteredIsolatedEnergy
-            << " unclusteredNonIsolatedEnergy=" << m_evt_unclusteredNonIsolatedEnergy
-            << " totalEnergy=" << m_evt_totalEnergy
-            << " clusters=" << m_evt_nClusters << " PFOs=" << m_evt_nPFOs
-            << endmsg;
+
+    // get cosTheta of the quark from Z->qq decay in pythia8 
+    float cosThetaQQ = -10.;
+    const edm4hep::MCParticleCollection* edmMcParticles = m_mcParticleHandle.get();
+    for (auto pMCParticle : *edmMcParticles)
+    {
+       if(pMCParticle.getGeneratorStatus() != 23) continue;
+       TLorentzVector tlv;
+       tlv.SetXYZT(pMCParticle.getMomentum().x, pMCParticle.getMomentum().y, pMCParticle.getMomentum().z, pMCParticle.getEnergy());
+       cosThetaQQ = cos(tlv.Theta());
+       break;
+    }
+
   } else {
     warning() << "EventMonitoringData not found for this event." << endmsg;
   }
 
-  // Retrieve the calo hit collection from the Event Store
-  const GaudiPfoMonitoring::CaloHitMonDataCollection *caloHitDataBuffer =
-      nullptr;
+  const GaudiPfoMonitoring::CaloHitMonDataCollection *caloHitDataBuffer = nullptr;
   if (eventSvc()
           ->retrieveObject("/Event/CaloHitMonitoringData",
                            (DataObject *&)caloHitDataBuffer)
           .isSuccess()) {
-    debug() << "Saving " << caloHitDataBuffer->size() << " calo hits to Tree."
-            << endmsg;
+    debug() << "Saving " << caloHitDataBuffer->size() << " calo hits to Tree." << endmsg;
     for (const auto &hitData : *caloHitDataBuffer) {
       m_hit_energy.push_back(hitData.getEnergy());
       m_hit_pseudoLayer.push_back(hitData.getPseudoLayer());
@@ -439,8 +445,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_hit_positionZ.push_back(hitData.getPositionZ());
       m_hit_type.push_back(hitData.getHitType());
       m_hit_isolationNearbyHits.push_back(hitData.getIsolationNearbyHits());
-      m_hit_distToMostEnergeticClusterCentroid.push_back(
-          hitData.getDistToMostEnergeticClusterCentroid());
+      m_hit_distToMostEnergeticClusterCentroid.push_back(hitData.getDistToMostEnergeticClusterCentroid());
       m_hit_shortestIsolationDist.push_back(hitData.getShortestIsolationDist());
       m_hit_mcPdg.push_back(hitData.getMcPdg());
     }
@@ -448,16 +453,31 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
     warning() << "CaloHitMonitoringData not found for this event." << endmsg;
   }
 
+  const GaudiPfoMonitoring::MCParticleMonDataCollection *mcParticleDataBuffer = nullptr;
+  if (eventSvc()
+          ->retrieveObject("/Event/MCParticleMonitoringData",
+                           (DataObject *&)mcParticleDataBuffer)
+          .isSuccess()) {
+    debug() << "Saving " << mcParticleDataBuffer->size() << " MC particles to Tree." << endmsg;
+    for (const auto &mcData : *mcParticleDataBuffer) {
+      m_mc_pdg.push_back(mcData.getPdg());
+      m_mc_energy.push_back(mcData.getEnergy());
+      m_mc_px.push_back(mcData.getPx());
+      m_mc_py.push_back(mcData.getPy());
+      m_mc_pz.push_back(mcData.getPz());
+      m_mc_hasCaloHit.push_back(mcData.getHasCaloHit());
+      m_mc_hasMatchedPfo.push_back(mcData.getHasMatchedPfo());
+    }
+  } else {
+    warning() << "MCParticleMonitoringData not found for this event." << endmsg;
+  }
+
   m_outputTree->Fill();
-
-  // Note: No clear() needed! Gaudi clears the Event Store automatically.
-
   return StatusCode::SUCCESS;
 }
 
 StatusCode SavePfoMonitoringTree::finalize() {
   info() << "Finalizing " << name() << "..." << endmsg;
-
   if (m_outputFile) {
     m_outputFile->Write();
     m_outputFile->Close();

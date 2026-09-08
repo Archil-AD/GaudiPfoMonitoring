@@ -1,0 +1,29 @@
+package: GaudiPfoMonitoring
+namespace: GaudiPfoMonitoring
+name: MCParticleMonData
+collection_id: 1005
+members:
+  - name: pdg
+    type: int32_t
+    description: "PDG code of the MC particle"
+  - name: energy
+    type: float
+    description: "Energy of the MC particle"
+  - name: px
+    type: float
+    description: "Momentum X component of the MC particle"
+  - name: py
+    type: float
+    description: "Momentum Y component of the MC particle"
+  - name: pz
+    type: float
+    description: "Momentum Z component of the MC particle"
+  - name: generatorStatus
+    type: int32_t
+    description: "Generator status of the MC particle (e.g. 1 for stable final-state)"
+  - name: hasCaloHit
+    type: uint32_t
+    description: "1 if the MC particle left at least one hit in the calorimeters, 0 otherwise"
+  - name: hasMatchedPfo
+    type: uint32_t
+    description: "1 if the MC particle was matched to a reconstructed PFO, 0 otherwise"

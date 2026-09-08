@@ -10,6 +10,7 @@
 
 #include "Pandora/Algorithm.h"
 #include "Api/PandoraApi.h"
+#include "Helpers/ClusterFitHelper.h"
 
 #include <TFile.h>
 #include <string>
@@ -124,6 +125,7 @@ private:
     bool m_createClusterMonData;
     bool m_createEventMonData;
     bool m_createCaloHitMonData;
+    bool m_createMCParticleMonData;
     std::string m_isolatedCaloHitListName; ///< The name of the dedicated isolated hit list
 
     float m_isolationCutDistanceFine2;      ///< Squared isolation cut distance for fine-granularity hits
