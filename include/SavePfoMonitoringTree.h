@@ -75,6 +75,7 @@ namespace GaudiPfoMonitoring
         mutable float        m_evt_fNeutralEnergyRecoNeutral;
         mutable unsigned int m_evt_nClusters;
         mutable unsigned int m_evt_nPFOs;
+        mutable float        m_evt_cosThetaQQ;
 
         // Cluster branches (one entry per cluster in pAllClusters)
         mutable std::vector<float>        m_clus_energy;

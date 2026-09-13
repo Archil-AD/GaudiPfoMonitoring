@@ -28,6 +28,7 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_evt_totalEnergy(0.f), m_evt_chargedEnergy(0.f), m_evt_neutralEnergy(0.f),
       m_evt_fChargedEnergyRecoCharged(0.f), m_evt_fChargedEnergyRecoNeutral(0.f), m_evt_fNeutralEnergyRecoCharged(0.f), m_evt_fNeutralEnergyRecoNeutral(0.f),
       m_evt_nUnclusteredNonIsolatedHits(0), m_evt_nClusters(0), m_evt_nPFOs(0),
+      m_evt_cosThetaQQ(-10.f),
       m_clus_energy(), m_clus_nHits(), m_clus_nMipLikeHits(),
       m_clus_nEcalHits(), m_clus_nHcalHits(), m_clus_nMipEcalHits(), m_clus_showerStartLayer(),
       m_clus_nMipHcalHits(), m_clus_startLayer(), m_clus_nLayers(), m_clus_passPhotonId(),
@@ -94,6 +95,8 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("evt_fNeutralEnergyRecoNeutral", &m_evt_fNeutralEnergyRecoNeutral, "evt_fNeutralEnergyRecoNeutral/F");
   m_outputTree->Branch("evt_nClusters", &m_evt_nClusters, "evt_nClusters/i");
   m_outputTree->Branch("evt_nPFOs", &m_evt_nPFOs, "evt_nPFOs/i");
+  m_outputTree->Branch("evt_cosThetaQQ", &m_evt_cosThetaQQ,
+                       "evt_cosThetaQQ/F");
 
   m_outputTree->Branch("pfo_energy", &m_pfo_energy);
   m_outputTree->Branch("pfo_pdg", &m_pfo_pdg);
@@ -234,6 +237,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_evt_nUnclusteredNonIsolatedHits = 0;
   m_evt_nClusters = 0;
   m_evt_nPFOs = 0;
+  m_evt_cosThetaQQ = -10.f;
 
   m_clus_energy.clear();
   m_clus_nHits.clear();
@@ -413,14 +417,14 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
     m_evt_nPFOs = evtData.getNPFOs();
 
     // get cosTheta of the quark from Z->qq decay in pythia8 
-    float cosThetaQQ = -10.;
+    m_evt_cosThetaQQ = -10.f;
     const edm4hep::MCParticleCollection* edmMcParticles = m_mcParticleHandle.get();
     for (auto pMCParticle : *edmMcParticles)
     {
        if(pMCParticle.getGeneratorStatus() != 23) continue;
        TLorentzVector tlv;
        tlv.SetXYZT(pMCParticle.getMomentum().x, pMCParticle.getMomentum().y, pMCParticle.getMomentum().z, pMCParticle.getEnergy());
-       cosThetaQQ = cos(tlv.Theta());
+       m_evt_cosThetaQQ = cos(tlv.Theta());
        break;
     }
 
