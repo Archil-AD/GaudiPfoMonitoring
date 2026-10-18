@@ -38,6 +38,7 @@
 #include <cmath>
 #include <iomanip>
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 
 using namespace pandora;
@@ -53,7 +54,9 @@ namespace lc_content {
 PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
     : m_nCorrectNeutralHadronPfo(0), m_nWrongNeutralHadronPfo(0),
       m_nCorrectChargedHadronPfo(0), m_nWrongChargedHadronPfo(0),
-      m_neutralHadronEnergyFractionCut(0.7), m_createPfoMonData(true),
+      m_neutralHadronEnergyFractionCut(0.7),
+      m_mcPfoMatchEnergyFractionCut(0.5f),
+      m_createPfoMonData(true),
       m_createClusterMonData(true), m_createEventMonData(true),
       m_createCaloHitMonData(true), m_createMCParticleMonData(true),
       m_isolatedCaloHitListName("IsolatedCaloHitList"),
@@ -326,8 +329,12 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     }
   }
 
-  // Track MC particles matched to reconstructed PFOs
-  std::unordered_set<const MCParticle *> mcMatchedToPfo;
+  // Track the hadronic energy deposited by each MC particle (PFO target) in
+  // each reconstructed PFO, plus the total hadronic energy of each PFO. These
+  // are used to determine the best-matched PFO via the energy-fraction
+  // criterion (see the MCParticle filling section below).
+  std::unordered_map<const MCParticle *, std::unordered_map<const ParticleFlowObject *, float>> mcEnergyInPfo;
+  std::unordered_map<const ParticleFlowObject *, float> pfoTotalEnergy;
 
   //--------------------------------------------------------------------------------------------------------------
   // Fill PFO monitoring data from pPfoList
@@ -438,7 +445,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
             pfoData.setMcPdg(pMCParticle->GetParticleId());
             pfoData.setMcEnergy(pMCParticle->GetEnergy());
-            mcMatchedToPfo.insert(pMCParticle);
 
             // Opening angle between PFO and MC particle
             const CartesianVector &mcMomentum(pMCParticle->GetMomentum());
@@ -485,6 +491,13 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         chargedEnergy += clusterEnergy * fCharged;
       }
 
+      // Record the energy deposited by each MC particle (PFO target) in this
+      // PFO, together with the PFO total hadronic energy. Used later to select
+      // the best-matched PFO for each MC particle.
+      for (const auto &contribution : mcParticleContributions)
+        mcEnergyInPfo[contribution.first][pPfo] += contribution.second;
+      pfoTotalEnergy[pPfo] = totEnergy;
+
       // calculate energy fractions for the given PFO
       if (totEnergy > 0.f) {
         fCharged = chargedEnergy / totEnergy;
@@ -509,7 +522,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
             pfoData.setMcPdg(pBestMCMatch->GetParticleId());
             pfoData.setMcEnergy(pBestMCMatch->GetEnergy());
-            mcMatchedToPfo.insert(pBestMCMatch);
 
             // Opening angle alpha between PFO and MC particle
             const CartesianVector &mcMomentum(pBestMCMatch->GetMomentum());
@@ -1244,6 +1256,55 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       }
     }
 
+    // Determine, for each MC particle, the best-matched PFO using the
+    // energy-fraction criterion: a PFO is matched if the MC particle deposited
+    // at least the configured fraction of its hadronic energy; when the MC
+    // particle contributes to several PFOs, the one with the largest energy
+    // deposition is chosen.
+    std::unordered_map<const MCParticle *, const ParticleFlowObject *> mcBestPfo;
+    std::unordered_map<const MCParticle *, float> mcBestPfoEnergy;
+    for (const MCParticle *const pMC : *pMCParticleList) {
+      const auto pfoContributionsIter = mcEnergyInPfo.find(pMC);
+      if (pfoContributionsIter == mcEnergyInPfo.end())
+        continue;
+
+      const ParticleFlowObject *bestPfo = nullptr;
+      float bestDepositedEnergy = 0.f;
+      for (const auto &pfoContribution : pfoContributionsIter->second) {
+        const ParticleFlowObject *const pPfo = pfoContribution.first;
+        const float depositedEnergy = pfoContribution.second;
+        const auto totalEnergyIter = pfoTotalEnergy.find(pPfo);
+        const float totalEnergy =
+            (totalEnergyIter != pfoTotalEnergy.end()) ? totalEnergyIter->second : 0.f;
+        const float energyFraction =
+            (totalEnergy > 0.f) ? (depositedEnergy / totalEnergy) : 0.f;
+        if (energyFraction < m_mcPfoMatchEnergyFractionCut)
+          continue;
+        if (depositedEnergy > bestDepositedEnergy) {
+          bestDepositedEnergy = depositedEnergy;
+          bestPfo = pPfo;
+        }
+      }
+      if (bestPfo) {
+        mcBestPfo[pMC] = bestPfo;
+        mcBestPfoEnergy[pMC] = bestDepositedEnergy;
+      }
+    }
+
+    // When several MC particles are matched to the same PFO, keep only the one
+    // with the largest energy contribution to that PFO.
+    std::unordered_map<const ParticleFlowObject *, const MCParticle *> pfoWinner;
+    for (const auto &entry : mcBestPfo) {
+      const MCParticle *const pMC = entry.first;
+      const ParticleFlowObject *const pPfo = entry.second;
+      const float depositedEnergy = mcBestPfoEnergy[pMC];
+      const auto winnerIter = pfoWinner.find(pPfo);
+      if (winnerIter == pfoWinner.end() ||
+          depositedEnergy > mcBestPfoEnergy[winnerIter->second]) {
+        pfoWinner[pPfo] = pMC;
+      }
+    }
+
     for (const MCParticle *const pMC : *pMCParticleList) {
       // edm4hep::MCParticle *pMCParticle = dynamic_cast<edm4hep::MCParticle*>
       // (pMC->GetUid());
@@ -1258,7 +1319,19 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       // set to 0 (unknown). Retrieve from edm4hep if needed.
       mcData.setGeneratorStatus(0);
       mcData.setHasCaloHit(mcWithCaloHits.count(pMC) ? 1u : 0u);
-      mcData.setHasMatchedPfo(mcMatchedToPfo.count(pMC) ? 1u : 0u);
+
+      // Only the winning MC particle of a PFO keeps the match; all others that
+      // pointed at the same PFO are unset.
+      const auto bestPfoIter = mcBestPfo.find(pMC);
+      const auto winnerIter =
+          (bestPfoIter != mcBestPfo.end())
+              ? pfoWinner.find(bestPfoIter->second)
+              : pfoWinner.end();
+      const bool isWinner =
+          (winnerIter != pfoWinner.end() && winnerIter->second == pMC);
+      mcData.setHasMatchedPfo(isWinner ? 1u : 0u);
+      mcData.setMatchedPfoPdg(
+          isWinner ? bestPfoIter->second->GetParticleId() : 0);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -1635,6 +1708,11 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "NeutralHadronEnergyFractionCut",
                            m_neutralHadronEnergyFractionCut));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "McPfoMatchEnergyFractionCut",
+                           m_mcPfoMatchEnergyFractionCut));
 
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,

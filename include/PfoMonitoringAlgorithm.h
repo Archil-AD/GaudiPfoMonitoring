@@ -120,6 +120,7 @@ private:
     unsigned int m_nCorrectChargedHadronPfo;
     unsigned int m_nWrongChargedHadronPfo;
     float m_neutralHadronEnergyFractionCut;
+    float m_mcPfoMatchEnergyFractionCut; ///< Minimum energy fraction of a PFO deposited by an MC particle for it to be considered matched
 
     bool m_createPfoMonData;
     bool m_createClusterMonData;

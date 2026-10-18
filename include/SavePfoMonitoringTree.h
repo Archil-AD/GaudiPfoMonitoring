@@ -128,6 +128,7 @@ namespace GaudiPfoMonitoring
         mutable std::vector<int>          m_mc_generatorStatus;
         mutable std::vector<unsigned int> m_mc_hasCaloHit;
         mutable std::vector<unsigned int> m_mc_hasMatchedPfo;
+        mutable std::vector<int>          m_mc_matchedPfoPdg;
 
         // CaloHit branches (one entry per calo hit)
         mutable std::vector<float>        m_hit_energy;

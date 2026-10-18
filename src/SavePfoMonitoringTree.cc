@@ -38,7 +38,7 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_clus_minParallelDistance(), m_clus_layerSpan(), m_clus_showerLayerSpan(), m_clus_contactFraction(), m_clus_closeHitFraction(),
       m_clus_canBeMerged(), m_clus_rms(), m_clus_dCosR(), m_clus_hasAssociatedTrack(), m_clus_fNeutral(), m_clus_fPhoton(), m_clus_fCharged(), m_clus_nRadiationLengths(), m_clus_nRadiationLengthsBeforeClusterStart(), m_clus_layer90RadLengths(), m_clus_showerMaxRadLengths(), m_clus_radial90(), m_clus_fractionOfEnergyAboveHighRadLengths(), m_clus_chi(), m_clus_chi0(), m_clus_mcPdg(), m_clus_mcEnergy(),
       m_mc_pdg(), m_mc_energy(), m_mc_px(), m_mc_py(), m_mc_pz(), m_mc_generatorStatus(),
-      m_mc_hasCaloHit(), m_mc_hasMatchedPfo(),
+      m_mc_hasCaloHit(), m_mc_hasMatchedPfo(), m_mc_matchedPfoPdg(),
       m_hit_energy(),
       m_hit_pseudoLayer(), m_hit_cellLengthScale(), m_hit_isIsolated(),
       m_hit_positionX(), m_hit_positionY(),
@@ -187,6 +187,7 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("mc_pz", &m_mc_pz);
   m_outputTree->Branch("mc_hasCaloHit", &m_mc_hasCaloHit);
   m_outputTree->Branch("mc_hasMatchedPfo", &m_mc_hasMatchedPfo);
+  m_outputTree->Branch("mc_matchedPfoPdg", &m_mc_matchedPfoPdg);
 
   info() << "Successfully initialized and opened ROOT file: "
             "GaudiPfoMonitoring.root"
@@ -288,6 +289,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_mc_generatorStatus.clear();
   m_mc_hasCaloHit.clear();
   m_mc_hasMatchedPfo.clear();
+  m_mc_matchedPfoPdg.clear();
 
   m_hit_energy.clear();
   m_hit_pseudoLayer.clear();
@@ -471,6 +473,7 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_mc_pz.push_back(mcData.getPz());
       m_mc_hasCaloHit.push_back(mcData.getHasCaloHit());
       m_mc_hasMatchedPfo.push_back(mcData.getHasMatchedPfo());
+      m_mc_matchedPfoPdg.push_back(mcData.getMatchedPfoPdg());
     }
   } else {
     warning() << "MCParticleMonitoringData not found for this event." << endmsg;

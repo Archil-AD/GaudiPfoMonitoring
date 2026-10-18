@@ -26,4 +26,7 @@ members:
     description: "1 if the MC particle left at least one hit in the calorimeters, 0 otherwise"
   - name: hasMatchedPfo
     type: uint32_t
-    description: "1 if the MC particle was matched to a reconstructed PFO, 0 otherwise"
+    description: "1 if the MC particle deposited at least 25% of the energy of a reconstructed PFO, 0 otherwise"
+  - name: matchedPfoPdg
+    type: int32_t
+    description: "PDG code of the reconstructed PFO with the largest MC energy deposition (>= 25% fraction), 0 if no match"

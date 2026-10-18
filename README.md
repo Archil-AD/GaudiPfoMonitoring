@@ -60,6 +60,7 @@ The `PfoMonitoringAlgorithm` exposes the following configurable parameters via P
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `NeutralHadronEnergyFractionCut` | float | `0.7` | Minimum neutral energy fraction for a neutral PFO to be classified as a correct neutral hadron |
+| `McPfoMatchEnergyFractionCut` | float | `0.25` | Minimum fraction of a PFO's energy that must be deposited by an MC particle for that PFO to be considered matched to the MC particle |
 
 ### Isolation parameters (CaloHit monitoring)
 | Parameter | Type | Default | Description |
@@ -186,7 +187,8 @@ Truth-level information for every MC particle in Pandora's current MC particle l
 * **px, py, pz**: Cartesian components of the MC particle momentum (from `pandora::MCParticle::GetMomentum()`).
 * **generatorStatus**: Generator status of the MC particle. Not directly available from the `pandora::MCParticle` interface, so it is currently set to `0` (unknown) in this collection; for the proper generator status code, retrieve it from the upstream `edm4hep::MCParticleCollection` via the `MCParticles` handle used by `SavePfoMonitoringTree`.
 * **hasCaloHit**: Flag (0 or 1) indicating whether the MC particle is the main MC particle of at least one reconstructed calorimeter hit in Pandora's `CaloHits` list, evaluated via `MCParticleHelper::GetMainMCParticle(pCaloHit)`.
-* **hasMatchedPfo**: Flag (0 or 1) indicating whether the MC particle was matched to a reconstructed PFO during reconstruction — i.e. it was the main MC particle of the PFO's track (charged PFOs) or the best MC match of the PFO's clusters (neutral PFOs).
+* **hasMatchedPfo**: Flag (0 or 1) indicating whether the MC particle was matched to a reconstructed PFO. A PFO is considered matched when the MC particle deposited at least `McPfoMatchEnergyFractionCut` (25% by default) of the PFO's hadronic energy; if the MC particle deposited energy into more than one PFO, the PFO with the largest energy deposition is selected. When several MC particles are matched to the same PFO, only the one with the largest energy contribution to that PFO keeps the match and the others are set to 0.
+* **matchedPfoPdg**: PDG code of the matched reconstructed PFO (from `pandora::ParticleFlowObject::GetParticleId()`), or `0` if no PFO was matched.
 
 ## Output ROOT Tree Structure
 
