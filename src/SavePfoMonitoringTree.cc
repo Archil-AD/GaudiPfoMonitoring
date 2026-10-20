@@ -5,6 +5,7 @@
 #include "EventMonDataCollection.h"
 #include "MCParticleMonDataCollection.h"
 #include "PfoMonDataCollection.h"
+#include "TrackMonDataCollection.h"
 #include "TLorentzVector.h"
 
 DECLARE_COMPONENT(GaudiPfoMonitoring::SavePfoMonitoringTree)
@@ -37,6 +38,11 @@ SavePfoMonitoringTree::SavePfoMonitoringTree(const std::string &name,
       m_clus_minInnerLayerSeparation(), m_clus_minGenericDistance(),
       m_clus_minParallelDistance(), m_clus_layerSpan(), m_clus_showerLayerSpan(), m_clus_contactFraction(), m_clus_closeHitFraction(),
       m_clus_canBeMerged(), m_clus_rms(), m_clus_dCosR(), m_clus_hasAssociatedTrack(), m_clus_fNeutral(), m_clus_fPhoton(), m_clus_fCharged(), m_clus_nRadiationLengths(), m_clus_nRadiationLengthsBeforeClusterStart(), m_clus_layer90RadLengths(), m_clus_showerMaxRadLengths(), m_clus_radial90(), m_clus_fractionOfEnergyAboveHighRadLengths(), m_clus_chi(), m_clus_chi0(), m_clus_mcPdg(), m_clus_mcEnergy(),
+      m_clus_trackClusterDistance(), m_clus_trackClusterParallelDistance(), m_clus_trackClusterCosAngle(),
+      m_trk_pt(), m_trk_theta(), m_trk_p(),
+      m_trk_trackClusterDistance(), m_trk_trackClusterParallelDistance(), m_trk_trackClusterCosAngle(),
+      m_trk_matchedClusterEnergy(), m_trk_matchedClusterStartLayer(), m_trk_matchedClusterNLayers(),
+      m_trk_matchedClusterIsEm(), m_trk_matchedClusterNHits(), m_trk_matchedClusterNMipLikeHits(),
       m_mc_pdg(), m_mc_energy(), m_mc_px(), m_mc_py(), m_mc_pz(), m_mc_generatorStatus(),
       m_mc_hasCaloHit(), m_mc_hasMatchedPfo(), m_mc_matchedPfoPdg(),
       m_hit_energy(),
@@ -163,6 +169,22 @@ StatusCode SavePfoMonitoringTree::initialize() {
   m_outputTree->Branch("clus_hasAssociatedTrack", &m_clus_hasAssociatedTrack);
   m_outputTree->Branch("clus_chi", &m_clus_chi);
   m_outputTree->Branch("clus_chi0", &m_clus_chi0);
+  m_outputTree->Branch("clus_trackClusterDistance", &m_clus_trackClusterDistance);
+  m_outputTree->Branch("clus_trackClusterParallelDistance", &m_clus_trackClusterParallelDistance);
+  m_outputTree->Branch("clus_trackClusterCosAngle", &m_clus_trackClusterCosAngle);
+
+  m_outputTree->Branch("trk_pt", &m_trk_pt);
+  m_outputTree->Branch("trk_theta", &m_trk_theta);
+  m_outputTree->Branch("trk_p", &m_trk_p);
+  m_outputTree->Branch("trk_trackClusterDistance", &m_trk_trackClusterDistance);
+  m_outputTree->Branch("trk_trackClusterParallelDistance", &m_trk_trackClusterParallelDistance);
+  m_outputTree->Branch("trk_trackClusterCosAngle", &m_trk_trackClusterCosAngle);
+  m_outputTree->Branch("trk_matchedClusterEnergy", &m_trk_matchedClusterEnergy);
+  m_outputTree->Branch("trk_matchedClusterStartLayer", &m_trk_matchedClusterStartLayer);
+  m_outputTree->Branch("trk_matchedClusterNLayers", &m_trk_matchedClusterNLayers);
+  m_outputTree->Branch("trk_matchedClusterIsEm", &m_trk_matchedClusterIsEm);
+  m_outputTree->Branch("trk_matchedClusterNHits", &m_trk_matchedClusterNHits);
+  m_outputTree->Branch("trk_matchedClusterNMipLikeHits", &m_trk_matchedClusterNMipLikeHits);
 
   m_outputTree->Branch("hit_energy", &m_hit_energy);
   m_outputTree->Branch("hit_pseudoLayer", &m_hit_pseudoLayer);
@@ -276,6 +298,21 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
   m_clus_fractionOfEnergyAboveHighRadLengths.clear();
   m_clus_chi.clear();
   m_clus_chi0.clear();
+  m_clus_trackClusterDistance.clear();
+  m_clus_trackClusterParallelDistance.clear();
+  m_clus_trackClusterCosAngle.clear();
+  m_trk_pt.clear();
+  m_trk_theta.clear();
+  m_trk_p.clear();
+  m_trk_trackClusterDistance.clear();
+  m_trk_trackClusterParallelDistance.clear();
+  m_trk_trackClusterCosAngle.clear();
+  m_trk_matchedClusterEnergy.clear();
+  m_trk_matchedClusterStartLayer.clear();
+  m_trk_matchedClusterNLayers.clear();
+  m_trk_matchedClusterIsEm.clear();
+  m_trk_matchedClusterNHits.clear();
+  m_trk_matchedClusterNMipLikeHits.clear();
   m_clus_fNeutral.clear();
   m_clus_fPhoton.clear();
   m_clus_fCharged.clear();
@@ -387,9 +424,36 @@ StatusCode SavePfoMonitoringTree::execute(const EventContext &) const {
       m_clus_fPhoton.push_back(clusData.getFPhoton());
       m_clus_fCharged.push_back(clusData.getFCharged());
       m_clus_hasAssociatedTrack.push_back(clusData.getHasAssociatedTrack());
+      m_clus_trackClusterDistance.push_back(clusData.getTrackClusterDistance());
+      m_clus_trackClusterParallelDistance.push_back(clusData.getTrackClusterParallelDistance());
+      m_clus_trackClusterCosAngle.push_back(clusData.getTrackClusterCosAngle());
     }
   } else {
     warning() << "ClusterMonitoringData not found for this event." << endmsg;
+  }
+
+  const GaudiPfoMonitoring::TrackMonDataCollection *trackDataBuffer = nullptr;
+  if (eventSvc()
+          ->retrieveObject("/Event/TrackMonitoringData",
+                           (DataObject *&)trackDataBuffer)
+          .isSuccess()) {
+    debug() << "Saving " << trackDataBuffer->size() << " tracks to Tree." << endmsg;
+    for (const auto &trkData : *trackDataBuffer) {
+      m_trk_pt.push_back(trkData.getPt());
+      m_trk_theta.push_back(trkData.getTheta());
+      m_trk_p.push_back(trkData.getP());
+      m_trk_trackClusterDistance.push_back(trkData.getTrackClusterDistance());
+      m_trk_trackClusterParallelDistance.push_back(trkData.getTrackClusterParallelDistance());
+      m_trk_trackClusterCosAngle.push_back(trkData.getTrackClusterCosAngle());
+      m_trk_matchedClusterEnergy.push_back(trkData.getMatchedClusterEnergy());
+      m_trk_matchedClusterStartLayer.push_back(trkData.getMatchedClusterStartLayer());
+      m_trk_matchedClusterNLayers.push_back(trkData.getMatchedClusterNLayers());
+      m_trk_matchedClusterIsEm.push_back(trkData.getMatchedClusterIsEm());
+      m_trk_matchedClusterNHits.push_back(trkData.getMatchedClusterNHits());
+      m_trk_matchedClusterNMipLikeHits.push_back(trkData.getMatchedClusterNMipLikeHits());
+    }
+  } else {
+    warning() << "TrackMonitoringData not found for this event." << endmsg;
   }
 
   const GaudiPfoMonitoring::EventMonDataCollection *eventDataBuffer = nullptr;

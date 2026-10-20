@@ -33,32 +33,55 @@
 #include "EventMonDataCollection.h"
 #include "MCParticleMonDataCollection.h"
 #include "PfoMonDataCollection.h"
+#include "TrackMonDataCollection.h"
+
+#include "LCObjects/LCTrack.h"
 
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <limits>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
 using namespace pandora;
 
-class PfoMonitoringAlgorithmFactory : public pandora::AlgorithmFactory {
-public:
-  pandora::Algorithm *CreateAlgorithm() const {
-    return new lc_content::PfoMonitoringAlgorithm;
+// setup templates for tracking track:pseudolayer pair
+namespace std {
+template <> struct hash<std::pair<const pandora::Track *, unsigned>> {
+  std::size_t
+  operator()(std::pair<const pandora::Track *, unsigned> const &tps) const {
+    std::size_t h1 = std::hash<const pandora::Track *>()(tps.first);
+    std::size_t h2 = std::hash<unsigned>()(tps.second);
+    return h1 ^ (h2 << 1);
   }
 };
+} // namespace std
 
 namespace lc_content {
+
+typedef KDTreeLinkerAlgo<const pandora::CaloHit *, 4> HitKDTree;
+typedef KDTreeNodeInfoT<const pandora::CaloHit *, 4> HitKDNode;
+typedef std::unordered_multimap<std::pair<const pandora::Track *, unsigned int>,
+                                const pandora::CaloHit *>
+    TracksToHitsInPseudoLayerMap;
+typedef std::unordered_map<const pandora::CaloHit *, const pandora::Cluster *>
+    HitsToClustersMap;
+typedef std::set<const pandora::Cluster *> ClusterSet;
+
+} // namespace lc_content
+
+namespace lc_content {
+
 PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
     : m_nCorrectNeutralHadronPfo(0), m_nWrongNeutralHadronPfo(0),
       m_nCorrectChargedHadronPfo(0), m_nWrongChargedHadronPfo(0),
       m_neutralHadronEnergyFractionCut(0.7),
-      m_mcPfoMatchEnergyFractionCut(0.5f),
-      m_createPfoMonData(true),
+      m_mcPfoMatchEnergyFractionCut(0.5f), m_createPfoMonData(true),
       m_createClusterMonData(true), m_createEventMonData(true),
       m_createCaloHitMonData(true), m_createMCParticleMonData(true),
+      m_createTrackMonData(true),
       m_isolatedCaloHitListName("IsolatedCaloHitList"),
       m_isolationCutDistanceFine2(25.f * 25.f),
       m_isolationCutDistanceCoarse2(200.f * 200.f),
@@ -75,7 +98,11 @@ PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
       m_minCosConeAngleWrtRadial(0.25f), m_cosConeAngleWrtRadialCut1(0.5f),
       m_minHitSeparationCut1(std::sqrt(1000.f)),
       m_cosConeAngleWrtRadialCut2(0.75f),
-      m_minHitSeparationCut2(std::sqrt(1500.f)) {
+      m_minHitSeparationCut2(std::sqrt(1500.f)),
+      // Defaults from TrackClusterAssociationAlgorithm
+      m_useClusterAssociatedTracks(true), m_lowEnergyCut(0.2f),
+      m_tcaMaxSearchLayer(9), m_tcaParallelDistanceCut(100.f),
+      m_tcaMinTrackClusterCosAngle(0.f), m_tcaMaxDistanceCut(10.f) {
   std::cout << " ------------------------------------------------------------ "
             << std::endl;
   std::cout << " ------------ PfoMonitoringAlgorithm initialized ------------ "
@@ -210,6 +237,25 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     }
   }
 
+  // 7. Retrieve or Create the track monitoring collection
+  GaudiPfoMonitoring::TrackMonDataCollection *trackColl = nullptr;
+  if (m_createTrackMonData) {
+    if (eventSvc
+            ->retrieveObject("/Event/TrackMonitoringData",
+                             (DataObject *&)trackColl)
+            .isFailure()) {
+      trackColl = new GaudiPfoMonitoring::TrackMonDataCollection();
+      if (eventSvc->registerObject("/Event/TrackMonitoringData", trackColl)
+              .isFailure()) {
+        std::cout << "[PfoMonitoring] Could not register "
+                     "TrackMonitoringData"
+                  << std::endl;
+        delete trackColl;
+        return STATUS_CODE_FAILURE;
+      }
+    }
+  }
+
   m_trackMcPfoTargets.clear();
 
   //--------------------------------------------------------------------------------------------------------------
@@ -244,6 +290,13 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     // or the "Current cluster List" is not set correctly.
     std::cout << "[PfoMonitoring] Current Cluster list is EMPTY." << std::endl;
   }
+
+  //--------------------------------------------------------------------------------------------------------------
+  // get all tracks
+  const TrackList *pAllTracks = NULL;
+  PANDORA_RETURN_RESULT_IF(
+      STATUS_CODE_SUCCESS, !=,
+      PandoraContentApi::GetCurrentList(*this, pAllTracks));
 
   //--------------------------------------------------------------------------------------------------------------
   // Find the most energetic cluster and compute its energy-weighted centroid
@@ -333,7 +386,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
   // each reconstructed PFO, plus the total hadronic energy of each PFO. These
   // are used to determine the best-matched PFO via the energy-fraction
   // criterion (see the MCParticle filling section below).
-  std::unordered_map<const MCParticle *, std::unordered_map<const ParticleFlowObject *, float>> mcEnergyInPfo;
+  std::unordered_map<const MCParticle *,
+                     std::unordered_map<const ParticleFlowObject *, float>>
+      mcEnergyInPfo;
   std::unordered_map<const ParticleFlowObject *, float> pfoTotalEnergy;
 
   //--------------------------------------------------------------------------------------------------------------
@@ -897,6 +952,101 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         clusData.setFractionOfEnergyAboveHighRadLengths(
             clusFractionAboveHighRadLengths);
         clusData.setRadial90(clusRadial90);
+
+        // --- TrackClusterAssociation quantities ---
+        // Compute trackClusterDistance, parallelDistance and cosAngle by
+        // scanning ALL tracks (not just associated ones), mirroring the logic
+        // of ClusterHelper::GetTrackClusterDistance as called by
+        // TrackClusterAssociationAlgorithm.  The best (minimum perpendicular
+        // distance) track is selected.
+        float clusTrackClusterDistance = -1.f;
+        float clusTrackClusterParallelDistance = -1.f;
+        float clusTrackClusterCosAngle = -2.f;
+        if (pAllTracks && !pAllTracks->empty()) {
+          float globalMinPerpDistSquared(std::numeric_limits<float>::max());
+          float globalBestParallelDist(-1.f);
+          float globalBestCosAngle(-2.f);
+          bool anyDistanceFound(false);
+
+          const TrackList &associatedTrackList(
+              pCluster->GetAssociatedTrackList());
+          for (const Track *const pTrack :
+               (m_useClusterAssociatedTracks ? associatedTrackList
+                                             : *pAllTracks)) {
+
+            const TrackState &trackStateAtCalo(
+                pTrack->GetTrackStateAtCalorimeter());
+            const CartesianVector &trackPosition(
+                trackStateAtCalo.GetPosition());
+            const CartesianVector trackDirection(
+                trackStateAtCalo.GetMomentum().GetUnitVector());
+
+            // cos(angle) between track direction and cluster initial direction
+            const float cosAngle(trackDirection.GetCosOpeningAngle(
+                pCluster->GetInitialDirection()));
+
+            // Only compute distances if cluster inner layer is within the
+            // search range
+            if (pCluster->GetInnerPseudoLayer() > m_tcaMaxSearchLayer)
+              continue;
+
+            float minPerpDistSquared(std::numeric_limits<float>::max());
+            float bestParallelDist(-1.f);
+            bool distanceFound(false);
+
+            const OrderedCaloHitList &ocl(pCluster->GetOrderedCaloHitList());
+            for (auto iter = ocl.begin(), iterEnd = ocl.end(); iter != iterEnd;
+                 ++iter) {
+              if (iter->first > m_tcaMaxSearchLayer)
+                break;
+
+              for (auto hitIter = iter->second->begin(),
+                        hitIterEnd = iter->second->end();
+                   hitIter != hitIterEnd; ++hitIter) {
+                const CartesianVector posDiff((*hitIter)->GetPositionVector() -
+                                              trackPosition);
+                const float parallelDist(
+                    std::fabs(trackDirection.GetDotProduct(posDiff)));
+
+                if (parallelDist > m_tcaParallelDistanceCut)
+                  continue;
+
+                const float perpDistSquared(
+                    (trackDirection.GetCrossProduct(posDiff))
+                        .GetMagnitudeSquared());
+
+                if (perpDistSquared < minPerpDistSquared) {
+                  minPerpDistSquared = perpDistSquared;
+                  bestParallelDist = parallelDist;
+                  distanceFound = true;
+                }
+              }
+            }
+
+            if (distanceFound &&
+                minPerpDistSquared < globalMinPerpDistSquared) {
+              globalMinPerpDistSquared = minPerpDistSquared;
+              globalBestParallelDist = bestParallelDist;
+              globalBestCosAngle = cosAngle;
+              anyDistanceFound = true;
+            } else if (!anyDistanceFound && !distanceFound) {
+              // No distance found yet for any track; still record the best cos
+              // angle
+              if (cosAngle > globalBestCosAngle)
+                globalBestCosAngle = cosAngle;
+            }
+          }
+
+          clusTrackClusterCosAngle = globalBestCosAngle;
+          if (anyDistanceFound) {
+            clusTrackClusterDistance = std::sqrt(globalMinPerpDistSquared);
+            clusTrackClusterParallelDistance = globalBestParallelDist;
+          }
+        }
+        clusData.setTrackClusterDistance(clusTrackClusterDistance);
+        clusData.setTrackClusterParallelDistance(
+            clusTrackClusterParallelDistance);
+        clusData.setTrackClusterCosAngle(clusTrackClusterCosAngle);
       } catch (const pandora::StatusCodeException &e) {
         std::cout
             << "[PfoMonitoring] skipping cluster: pandora::StatusCodeException "
@@ -907,6 +1057,314 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       } catch (...) {
         std::cout << "[PfoMonitoring] skipping cluster: unknown" << std::endl;
       }
+    }
+  }
+  //--------------------------------------------------------------------------------------------------------------
+
+  //--------------------------------------------------------------------------------------------------------------
+  // Fill track monitoring data from all tracks
+  if (m_createTrackMonData && trackColl && pAllTracks) {
+    try {
+      // Build KD-tree of hits from all clusters for efficient track-cluster
+      // search (mirroring TrackClusterAssociationAlgorithm). Done once per
+      // event.
+      HitKDTree hits_kdtree;
+      std::vector<HitKDNode> hit_nodes;
+      CaloHitList hit_list;
+      HitsToClustersMap hits_to_clusters;
+
+      if (pAllClusters && !pAllClusters->empty()) {
+        for (const Cluster *const pCluster : *pAllClusters) {
+          CaloHitList clusterHits;
+          pCluster->GetOrderedCaloHitList().FillCaloHitList(clusterHits);
+          for (const CaloHit *const pCaloHit : clusterHits) {
+            hit_list.push_back(pCaloHit);
+            hits_to_clusters.emplace(pCaloHit, pCluster);
+          }
+          clusterHits.clear();
+        }
+
+        if (!hit_list.empty()) {
+          KDTreeTesseract hitsBoundingRegion =
+              fill_and_bound_4d_kd_tree(this, hit_list, hit_nodes, true);
+          hit_list.clear();
+          hits_kdtree.build(hit_nodes, hitsBoundingRegion);
+          hit_nodes.clear();
+        }
+      }
+
+      // Move result caches out of the track loop
+      ClusterSet nearby_clusters;
+      std::vector<HitKDNode> found_hits;
+      TracksToHitsInPseudoLayerMap tracks_to_hits;
+
+      // Select tracks to iterate over: either all tracks or cluster-associated
+      // tracks
+      TrackList trackList;
+      std::unordered_map<const Track *, const Cluster *> trackToClusterMap;
+      for (const Cluster *const pCluster : *pAllClusters) {
+        const TrackList &associatedTrackList(
+            pCluster->GetAssociatedTrackList());
+        for (const Track *const pTrack : associatedTrackList) {
+          if (trackToClusterMap.find(pTrack) == trackToClusterMap.end()) {
+            trackList.push_back(pTrack);
+            trackToClusterMap.emplace(pTrack, pCluster);
+          }
+        }
+      }
+
+      const TrackList &tracksToProcess =
+          m_useClusterAssociatedTracks ? trackList : *pAllTracks;
+
+      for (const Track *const pTrack : tracksToProcess) {
+        const Cluster *pMatchedCluster = nullptr;
+
+        const CartesianVector &momAtDca(pTrack->GetMomentumAtDca());
+        const float trackP = momAtDca.GetMagnitude();
+        const float trackPt = std::sqrt(momAtDca.GetX() * momAtDca.GetX() +
+                                        momAtDca.GetY() * momAtDca.GetY());
+        const float trackTheta =
+            (trackP > std::numeric_limits<float>::epsilon())
+                ? std::acos(
+                      std::max(-1.f, std::min(1.f, momAtDca.GetZ() / trackP)))
+                : 0.f;
+
+        // --- Track-cluster association from the track's perspective ---
+        // Mirroring TrackClusterAssociationAlgorithm: use KD-tree search per
+        // track state and pseudo-layer with caching, then select the best
+        // cluster via ClusterHelper::GetTrackClusterDistance with high/low
+        // energy separation and energy-difference tie-breaking.
+        float trkClusDistance = -1.f;
+        float trkClusParallelDistance = -1.f;
+        float trkClusCosAngle = -2.f;
+        float trkMatchedClusterEnergy = 0.f;
+        unsigned int trkMatchedClusterStartLayer = 0;
+        unsigned int trkMatchedClusterNLayers = 0;
+        unsigned int trkMatchedClusterIsEm = 0;
+        unsigned int trkMatchedClusterNHits = 0;
+        unsigned int trkMatchedClusterNMipLikeHits = 0;
+        const Cluster *pBestCluster = nullptr;
+        const Cluster *pBestLowEnergyCluster = nullptr;
+        float minDistance(m_tcaMaxDistanceCut);
+        float minLowEnergyDistance(m_tcaMaxDistanceCut);
+        float minEnergyDifference(std::numeric_limits<float>::max());
+        float minLowEnergyDifference(std::numeric_limits<float>::max());
+
+        if (!m_useClusterAssociatedTracks) {
+          // Get track states: LCTrack provides multiple states, fallback to
+          // single state at calorimeter
+          LCTrackStates trackStates;
+          const LCTrack *lcTrack = dynamic_cast<const LCTrack *>(pTrack);
+          if (lcTrack) {
+            trackStates = lcTrack->GetTrackStates();
+          } else {
+            const TrackState &trackState(pTrack->GetTrackStateAtCalorimeter());
+            trackStates.push_back(trackState);
+          }
+
+          for (auto const &trackState : trackStates) {
+            const CartesianVector &trackPosition(trackState.GetPosition());
+
+            for (unsigned iPseudoLayer = 0; iPseudoLayer <= m_tcaMaxSearchLayer;
+                 ++iPseudoLayer) {
+              // Save the hash key since we may use it a few times
+              auto hash_key = std::make_pair(pTrack, iPseudoLayer);
+              // See if we have a cached search, otherwise do the search and
+              // cache
+              auto cached_result = tracks_to_hits.equal_range(hash_key);
+              if (cached_result.first != tracks_to_hits.end()) {
+                for (auto iter = cached_result.first;
+                     iter != cached_result.second; ++iter) {
+                  // Build a list of nearby clusters
+                  nearby_clusters.insert(
+                      hits_to_clusters.find(iter->second)->second);
+                }
+              } else {
+                // Do search and cache result
+                KDTreeTesseract searchRegionHits = build_4d_kd_search_region(
+                    trackPosition, m_tcaParallelDistanceCut,
+                    m_tcaParallelDistanceCut, m_tcaParallelDistanceCut,
+                    iPseudoLayer);
+                hits_kdtree.search(searchRegionHits, found_hits);
+
+                for (const auto &hit : found_hits) {
+                  auto assc_cluster = hits_to_clusters.find(hit.data);
+                  if (assc_cluster != hits_to_clusters.end()) {
+                    // Cache all hits that are nearby the track
+                    tracks_to_hits.emplace(hash_key, hit.data);
+                    // Add to the list of nearby clusters
+                    nearby_clusters.insert(assc_cluster->second);
+                  }
+                }
+                found_hits.clear();
+              }
+            }
+
+            ClusterList nearbyClusterList(nearby_clusters.begin(),
+                                          nearby_clusters.end());
+            nearbyClusterList.sort(SortingHelper::SortClustersByNHits);
+            nearby_clusters.clear();
+
+            // Identify the closest cluster and also the closest cluster below a
+            // specified hadronic energy threshold
+            for (const Cluster *const pCluster : nearbyClusterList) {
+              if (0 == pCluster->GetNCaloHits())
+                continue;
+
+              float trackClusterDistance(std::numeric_limits<float>::max());
+              if (STATUS_CODE_SUCCESS !=
+                  lc_content::ClusterHelper::GetTrackClusterDistance(
+                      &trackState, pCluster, m_tcaMaxSearchLayer,
+                      m_tcaParallelDistanceCut, m_tcaMinTrackClusterCosAngle,
+                      trackClusterDistance)) {
+                continue;
+              }
+
+              const float energyDifference(std::fabs(
+                  pCluster->GetHadronicEnergy() - pTrack->GetEnergyAtDca()));
+
+              if (pCluster->GetHadronicEnergy() > m_lowEnergyCut) {
+                if ((trackClusterDistance < minDistance) ||
+                    ((trackClusterDistance == minDistance) &&
+                     (energyDifference < minEnergyDifference))) {
+                  minDistance = trackClusterDistance;
+                  pBestCluster = pCluster;
+                  minEnergyDifference = energyDifference;
+                }
+              } else {
+                if ((trackClusterDistance < minLowEnergyDistance) ||
+                    ((trackClusterDistance == minLowEnergyDistance) &&
+                     (energyDifference < minLowEnergyDifference))) {
+                  minLowEnergyDistance = trackClusterDistance;
+                  pBestLowEnergyCluster = pCluster;
+                  minLowEnergyDifference = energyDifference;
+                }
+              }
+            } // for all clusters
+          } // for all track states
+          if (!pMatchedCluster) {
+            if (nullptr != pBestCluster) {
+              pMatchedCluster = pBestCluster;
+            } else if (nullptr != pBestLowEnergyCluster) {
+              pMatchedCluster = pBestLowEnergyCluster;
+            }
+          }
+        } else
+        // If using cluster-associated tracks, take the directly associated
+        // cluster as pMatchedCluster instead of the result of the
+        // track-cluster search.
+        {
+          auto mapIt = trackToClusterMap.find(pTrack);
+          if (mapIt != trackToClusterMap.end()) {
+            pMatchedCluster = mapIt->second;
+          }
+        }
+
+        // Record properties of the matched cluster
+        if (nullptr != pMatchedCluster) {
+          trkMatchedClusterEnergy = pMatchedCluster->GetHadronicEnergy();
+          trkMatchedClusterStartLayer = pMatchedCluster->GetInnerPseudoLayer();
+          const unsigned int matchedOuterLayer =
+              pMatchedCluster->GetOuterPseudoLayer();
+          trkMatchedClusterNLayers =
+              (matchedOuterLayer >= pMatchedCluster->GetInnerPseudoLayer())
+                  ? (matchedOuterLayer -
+                     pMatchedCluster->GetInnerPseudoLayer() + 1)
+                  : 0u;
+          trkMatchedClusterIsEm =
+              this->GetPandora().GetPlugins()->GetParticleId()->IsEmShower(
+                  pMatchedCluster)
+                  ? 1u
+                  : 0u;
+          trkMatchedClusterNHits = pMatchedCluster->GetNCaloHits();
+          trkMatchedClusterNMipLikeHits =
+              pMatchedCluster->GetNPossibleMipHits();
+
+          // Compute distance-related variables using the track state at
+          // calorimeter and the matched cluster
+          const TrackState &trackStateAtCalo(
+              pTrack->GetTrackStateAtCalorimeter());
+          const CartesianVector &trackPosition(trackStateAtCalo.GetPosition());
+          const CartesianVector trackDirection(
+              trackStateAtCalo.GetMomentum().GetUnitVector());
+
+          trkClusCosAngle = trackDirection.GetCosOpeningAngle(
+              pMatchedCluster->GetInitialDirection());
+
+          float minPerpDistSquared(std::numeric_limits<float>::max());
+          float bestParallelDist(-1.f);
+          bool distanceFound(false);
+          const OrderedCaloHitList &ocl(
+              pMatchedCluster->GetOrderedCaloHitList());
+          for (auto iter = ocl.begin(), iterEnd = ocl.end(); iter != iterEnd;
+               ++iter) {
+            if (iter->first > m_tcaMaxSearchLayer)
+              break;
+
+            for (auto hitIter = iter->second->begin(),
+                      hitIterEnd = iter->second->end();
+                 hitIter != hitIterEnd; ++hitIter) {
+              const CartesianVector posDiff((*hitIter)->GetPositionVector() -
+                                            trackPosition);
+              const float parallelDist(
+                  std::fabs(trackDirection.GetDotProduct(posDiff)));
+
+              if (parallelDist > m_tcaParallelDistanceCut)
+                continue;
+
+              const float perpDistSquared(
+                  (trackDirection.GetCrossProduct(posDiff))
+                      .GetMagnitudeSquared());
+
+              if (perpDistSquared < minPerpDistSquared) {
+                minPerpDistSquared = perpDistSquared;
+                bestParallelDist = parallelDist;
+                distanceFound = true;
+              }
+            }
+          }
+
+          if (distanceFound) {
+            trkClusDistance = std::sqrt(minPerpDistSquared);
+            trkClusParallelDistance = bestParallelDist;
+          }
+        }
+        // no assosiation found
+        else {
+          trkClusDistance = -1.f;
+          trkClusParallelDistance = -1.f;
+          trkClusCosAngle = -2.f;
+          trkMatchedClusterEnergy = 0.f;
+          trkMatchedClusterStartLayer = 0;
+          trkMatchedClusterNLayers = 0;
+          trkMatchedClusterIsEm = 0;
+          trkMatchedClusterNHits = 0;
+          trkMatchedClusterNMipLikeHits = 0;
+        }
+
+        auto &trkData = trackColl->create();
+        trkData.setPt(trackPt);
+        trkData.setTheta(trackTheta);
+        trkData.setP(trackP);
+        trkData.setTrackClusterDistance(trkClusDistance);
+        trkData.setTrackClusterParallelDistance(trkClusParallelDistance);
+        trkData.setTrackClusterCosAngle(trkClusCosAngle);
+        trkData.setMatchedClusterEnergy(trkMatchedClusterEnergy);
+        trkData.setMatchedClusterStartLayer(trkMatchedClusterStartLayer);
+        trkData.setMatchedClusterNLayers(trkMatchedClusterNLayers);
+        trkData.setMatchedClusterIsEm(trkMatchedClusterIsEm);
+        trkData.setMatchedClusterNHits(trkMatchedClusterNHits);
+        trkData.setMatchedClusterNMipLikeHits(trkMatchedClusterNMipLikeHits);
+      }
+    } catch (const pandora::StatusCodeException &e) {
+      std::cout << "[PfoMonitoring] track block failed: "
+                   "pandora::StatusCodeException "
+                << e.ToString() << std::endl;
+    } catch (const std::exception &e) {
+      std::cout << "[PfoMonitoring] track block failed: " << e.what()
+                << std::endl;
+    } catch (...) {
+      std::cout << "[PfoMonitoring] track block failed: unknown" << std::endl;
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -1261,7 +1719,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
     // at least the configured fraction of its hadronic energy; when the MC
     // particle contributes to several PFOs, the one with the largest energy
     // deposition is chosen.
-    std::unordered_map<const MCParticle *, const ParticleFlowObject *> mcBestPfo;
+    std::unordered_map<const MCParticle *, const ParticleFlowObject *>
+        mcBestPfo;
     std::unordered_map<const MCParticle *, float> mcBestPfoEnergy;
     for (const MCParticle *const pMC : *pMCParticleList) {
       const auto pfoContributionsIter = mcEnergyInPfo.find(pMC);
@@ -1274,8 +1733,9 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         const ParticleFlowObject *const pPfo = pfoContribution.first;
         const float depositedEnergy = pfoContribution.second;
         const auto totalEnergyIter = pfoTotalEnergy.find(pPfo);
-        const float totalEnergy =
-            (totalEnergyIter != pfoTotalEnergy.end()) ? totalEnergyIter->second : 0.f;
+        const float totalEnergy = (totalEnergyIter != pfoTotalEnergy.end())
+                                      ? totalEnergyIter->second
+                                      : 0.f;
         const float energyFraction =
             (totalEnergy > 0.f) ? (depositedEnergy / totalEnergy) : 0.f;
         if (energyFraction < m_mcPfoMatchEnergyFractionCut)
@@ -1293,7 +1753,8 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
 
     // When several MC particles are matched to the same PFO, keep only the one
     // with the largest energy contribution to that PFO.
-    std::unordered_map<const ParticleFlowObject *, const MCParticle *> pfoWinner;
+    std::unordered_map<const ParticleFlowObject *, const MCParticle *>
+        pfoWinner;
     for (const auto &entry : mcBestPfo) {
       const MCParticle *const pMC = entry.first;
       const ParticleFlowObject *const pPfo = entry.second;
@@ -1323,15 +1784,14 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       // Only the winning MC particle of a PFO keeps the match; all others that
       // pointed at the same PFO are unset.
       const auto bestPfoIter = mcBestPfo.find(pMC);
-      const auto winnerIter =
-          (bestPfoIter != mcBestPfo.end())
-              ? pfoWinner.find(bestPfoIter->second)
-              : pfoWinner.end();
+      const auto winnerIter = (bestPfoIter != mcBestPfo.end())
+                                  ? pfoWinner.find(bestPfoIter->second)
+                                  : pfoWinner.end();
       const bool isWinner =
           (winnerIter != pfoWinner.end() && winnerIter->second == pMC);
       mcData.setHasMatchedPfo(isWinner ? 1u : 0u);
-      mcData.setMatchedPfoPdg(
-          isWinner ? bestPfoIter->second->GetParticleId() : 0);
+      mcData.setMatchedPfoPdg(isWinner ? bestPfoIter->second->GetParticleId()
+                                       : 0);
     }
   }
   //--------------------------------------------------------------------------------------------------------------
@@ -1740,6 +2200,11 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
 
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "CreateTrackMonData",
+                           m_createTrackMonData));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "IsolatedCaloHitListName",
                            m_isolatedCaloHitListName));
 
@@ -1838,6 +2303,36 @@ PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
       XmlHelper::ReadValue(xmlHandle, "MinHitSeparationCut2",
                            m_minHitSeparationCut2));
+
+  // TrackClusterAssociationAlgorithm parameters
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "TcaMaxSearchLayer",
+                           m_tcaMaxSearchLayer));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "TcaParallelDistanceCut",
+                           m_tcaParallelDistanceCut));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "TcaMinTrackClusterCosAngle",
+                           m_tcaMinTrackClusterCosAngle));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "TcaMaxDistanceCut",
+                           m_tcaMaxDistanceCut));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "LowEnergyCut", m_lowEnergyCut));
+
+  PANDORA_RETURN_RESULT_IF_AND_IF(
+      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+      XmlHelper::ReadValue(xmlHandle, "UseClusterAssociatedTracks",
+                           m_useClusterAssociatedTracks));
 
   return STATUS_CODE_SUCCESS;
 }

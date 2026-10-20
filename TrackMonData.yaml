@@ -1,0 +1,41 @@
+package: GaudiPfoMonitoring
+namespace: GaudiPfoMonitoring
+name: TrackMonData
+collection_id: 1006
+members:
+  - name: pt
+    type: float
+    description: "Transverse momentum of the track at the distance of closest approach (GeV)"
+  - name: theta
+    type: float
+    description: "Polar angle of the track momentum at the distance of closest approach (rad)"
+  - name: p
+    type: float
+    description: "Total momentum of the track at the distance of closest approach (GeV)"
+  - name: trackClusterDistance
+    type: float
+    description: "Perpendicular distance between this track direction (at calorimeter) and the closest calo hit in the best-matching cluster, computed by scanning all clusters as in ClusterHelper::GetTrackClusterDistance (TrackClusterAssociationAlgorithm). -1 if no cluster yields a valid distance or if the best distance exceeds TcaMaxDistanceCut."
+  - name: trackClusterParallelDistance
+    type: float
+    description: "Parallel distance (projection along track direction) for the closest hit of the best-matching cluster, as used in ClusterHelper::GetTrackClusterDistance (TrackClusterAssociationAlgorithm). -1 if no cluster yields a valid distance or if the best distance exceeds TcaMaxDistanceCut."
+  - name: trackClusterCosAngle
+    type: float
+    description: "Cos(angle) between the track direction at calorimeter and the initial direction of the best-matching cluster. -2 if no cluster yields a valid distance."
+  - name: matchedClusterEnergy
+    type: float
+    description: "Hadronic energy (GeV) of the best-matching cluster that determined trackClusterDistance. 0 if no cluster yields a valid distance (or the best distance exceeds TcaMaxDistanceCut)."
+  - name: matchedClusterStartLayer
+    type: uint32_t
+    description: "Inner pseudo layer of the best-matching cluster that determined trackClusterDistance. 0 if no cluster yields a valid distance."
+  - name: matchedClusterNLayers
+    type: uint32_t
+    description: "Number of pseudo layers spanned by the best-matching cluster that determined trackClusterDistance (outer - inner + 1). 0 if no cluster yields a valid distance."
+  - name: matchedClusterIsEm
+    type: uint32_t
+    description: "Flag (0/1) indicating if the best-matching cluster passes Pandora's electromagnetic shower identification, from Cluster::PassPhotonId (LCParticleIdPlugins::LCEmShowerId). 0 if no cluster yields a valid distance."
+  - name: matchedClusterNHits
+    type: uint32_t
+    description: "Total number of calo hits in the best-matching cluster that determined trackClusterDistance, from Cluster::GetNCaloHits. 0 if no cluster yields a valid distance."
+  - name: matchedClusterNMipLikeHits
+    type: uint32_t
+    description: "Number of MIP-like calo hits in the best-matching cluster that determined trackClusterDistance, from Cluster::GetNPossibleMipHits. 0 if no cluster yields a valid distance."

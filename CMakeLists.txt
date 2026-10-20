@@ -126,6 +126,20 @@ add_custom_command(
     VERBATIM
 )
 
+# --- TrackMonData ---
+set(TRACK_MON_YAML ${CMAKE_CURRENT_SOURCE_DIR}/TrackMonData.yaml)
+
+add_custom_command(
+    OUTPUT
+        ${PFO_MON_GENERATED_DIR}/TrackMonData.h
+        ${PFO_MON_GENERATED_DIR}/TrackMonDataCollection.h
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PFO_MON_GENERATED_DIR}
+    COMMAND python3 ${PFO_MON_GENERATOR} ${TRACK_MON_YAML} ${PFO_MON_GENERATED_DIR}
+    DEPENDS ${TRACK_MON_YAML} ${PFO_MON_GENERATOR}
+    COMMENT "Generating TrackMonData headers from YAML definition..."
+    VERBATIM
+)
+
 # Create a custom target to ensure generation runs before compilation
 add_custom_target(generate_pfo_mon_data DEPENDS
     ${PFO_MON_GENERATED_DIR}/PfoMonData.h
@@ -138,6 +152,8 @@ add_custom_target(generate_pfo_mon_data DEPENDS
     ${PFO_MON_GENERATED_DIR}/CaloHitMonDataCollection.h
     ${PFO_MON_GENERATED_DIR}/MCParticleMonData.h
     ${PFO_MON_GENERATED_DIR}/MCParticleMonDataCollection.h
+    ${PFO_MON_GENERATED_DIR}/TrackMonData.h
+    ${PFO_MON_GENERATED_DIR}/TrackMonDataCollection.h
 )
 
 # ============================================================================

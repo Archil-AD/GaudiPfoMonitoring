@@ -123,3 +123,12 @@ members:
   - name: chi0
     type: float
     description: "Chi0 compatibility of the most energetic cluster's (assumed parent) energy with its own track energy, as defined in ProximityBasedMergingAlgorithm: (parentEnergy - trackEnergySum) / sigmaE."
+  - name: trackClusterDistance
+    type: float
+    description: "Perpendicular distance between the closest track direction (at calorimeter) and the closest calo hit in the cluster, computed by scanning all tracks, as in ClusterHelper::GetTrackClusterDistance (TrackClusterAssociationAlgorithm). -1 if no track yields a valid distance."
+  - name: trackClusterParallelDistance
+    type: float
+    description: "Parallel distance (projection along track direction) for the closest hit of the best-matching track, as used in ClusterHelper::GetTrackClusterDistance (TrackClusterAssociationAlgorithm). -1 if no track yields a valid distance."
+  - name: trackClusterCosAngle
+    type: float
+    description: "Cos(angle) between the best-matching track direction and the cluster initial direction, as used in ClusterHelper::GetTrackClusterDistance (TrackClusterAssociationAlgorithm). -2 if there are no tracks."

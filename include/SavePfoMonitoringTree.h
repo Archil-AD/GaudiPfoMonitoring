@@ -118,6 +118,23 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float>        m_clus_fractionOfEnergyAboveHighRadLengths;
         mutable std::vector<float>        m_clus_chi;
         mutable std::vector<float>        m_clus_chi0;
+        mutable std::vector<float>        m_clus_trackClusterDistance;
+        mutable std::vector<float>        m_clus_trackClusterParallelDistance;
+        mutable std::vector<float>        m_clus_trackClusterCosAngle;
+
+        // Track branches (one entry per track)
+        mutable std::vector<float>        m_trk_pt;
+        mutable std::vector<float>        m_trk_theta;
+        mutable std::vector<float>        m_trk_p;
+        mutable std::vector<float>        m_trk_trackClusterDistance;
+        mutable std::vector<float>        m_trk_trackClusterParallelDistance;
+        mutable std::vector<float>        m_trk_trackClusterCosAngle;
+        mutable std::vector<float>        m_trk_matchedClusterEnergy;
+        mutable std::vector<unsigned int> m_trk_matchedClusterStartLayer;
+        mutable std::vector<unsigned int> m_trk_matchedClusterNLayers;
+        mutable std::vector<unsigned int> m_trk_matchedClusterIsEm;
+        mutable std::vector<unsigned int> m_trk_matchedClusterNHits;
+        mutable std::vector<unsigned int> m_trk_matchedClusterNMipLikeHits;
 
         // MCParticle branches (one entry per MC particle)
         mutable std::vector<int>          m_mc_pdg;

@@ -42,6 +42,7 @@ The monitoring data classes and their Gaudi-compatible collections are auto-gene
 | `EventMonData.yaml` | `EventMonData` | 1003 |
 | `CaloHitMonData.yaml` | `CaloHitMonData` | 1004 |
 | `MCParticleMonData.yaml` | `MCParticleMonData` | 1005 |
+| `TrackMonData.yaml` | `TrackMonData` | 1006 |
 
 ## Configurable Parameters
 
@@ -55,6 +56,7 @@ The `PfoMonitoringAlgorithm` exposes the following configurable parameters via P
 | `CreateEventMonData` | bool | `true` | Enable/disable event-level monitoring |
 | `CreateCaloHitMonData` | bool | `true` | Enable/disable calorimeter hit-level monitoring |
 | `CreateMCParticleMonData` | bool | `true` | Enable/disable MC particle-level monitoring |
+| `CreateTrackMonData` | bool | `true` | Enable/disable track-level monitoring |
 
 ### Neutral hadron classification
 | Parameter | Type | Default | Description |
@@ -97,9 +99,17 @@ The `PfoMonitoringAlgorithm` exposes the following configurable parameters via P
 | `CosConeAngleWrtRadialCut2` | float | `0.75` | Second cut on cosine of angle between cone axis and radial direction |
 | `MinHitSeparationCut2` | float | `38.73` | Second cut on minimum hit separation for low-angle cones (mm), default = sqrt(1500) |
 
+### Track-cluster association parameters (TrackClusterAssociationAlgorithm)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `TcaMaxSearchLayer` | uint | `9` | Maximum pseudo layer to examine when calculating track-cluster distance |
+| `TcaParallelDistanceCut` | float | `1000.0` | Maximum allowed projection of track-hit separation along track direction (mm) |
+| `TcaMinTrackClusterCosAngle` | float | `0.0` | Minimum cos(angle) between track direction and cluster initial direction |
+| `TcaMaxDistanceCut` | float | `10.0` | Maximum track-cluster perpendicular distance (mm) below which the association variables are recorded, mirroring `MaxTrackClusterDistance` in `TrackClusterAssociationAlgorithm`. If the best distance exceeds this cut, `trackClusterDistance` and `trackClusterParallelDistance` are set to -1 |
+
 ## Monitoring Variables
 
-The framework monitors five main categories of data, each provided as a TTree for analysis.
+The framework monitors six main categories of data, each provided as a TTree for analysis.
 
 ### 1. Calorimeter Hits (`CaloHitMonData`)
 Monitors individual hit properties and the results of Pandora's hit-level preprocessing.
@@ -150,6 +160,9 @@ Describes the topological clusters formed from hits, with variables used for sho
 * **radial90**: Radius (in mm) containing 90% of the cluster's electromagnetic energy, computed from hit energy and radial distance as in `LCParticleIdPlugins::LCEmShowerId`.
 * **chi**: Chi compatibility between this cluster and the most energetic cluster (assumed parent) when the most energetic cluster has track associations, calculated as in `ProximityBasedMergingAlgorithm`: `(clusterEnergy + parentEnergy - trackEnergySum) / sigmaE`. A value < `MaxTrackClusterChi` (default 2.5) indicates this cluster is energetically compatible with the parent's tracks, suggesting it should be merged. Set to -1 if the most energetic cluster has no tracks or if this cluster IS the most energetic cluster.
 * **chi0**: Chi0 compatibility of the most energetic cluster's energy with its own track energy, calculated as in `ProximityBasedMergingAlgorithm`: `(parentEnergy - trackEnergySum) / sigmaE`. The chi² difference criterion `chi² - chi0² < MaxTrackClusterDChi2` (default 1.0) is used to check if the addition of this cluster's energy significantly worsens the energy-track compatibility. Set to -1 if the most energetic cluster has no tracks.
+* **trackClusterDistance**: Perpendicular distance between the closest track direction (at calorimeter) and the closest calo hit in the cluster, computed by scanning all tracks in the current track list and selecting the one with the minimum perpendicular distance, as in `ClusterHelper::GetTrackClusterDistance` used by `TrackClusterAssociationAlgorithm`. The distance is the magnitude of the cross product of the track direction with the position difference vector to each hit, minimized over all hits within the search layer and parallel distance cuts. Set to -1 if no track yields a valid distance.
+* **trackClusterParallelDistance**: Parallel distance (projection of the position difference along the track direction) for the closest hit of the best-matching track that determined `trackClusterDistance`, as used in `ClusterHelper::GetTrackClusterDistance` (`TrackClusterAssociationAlgorithm`). Only hits with a parallel distance below `TcaParallelDistanceCut` are considered. Set to -1 if no track yields a valid distance.
+* **trackClusterCosAngle**: Cos(angle) between the best-matching track direction and the cluster initial direction. When a valid distance is found, this is the cos angle of that track; when no distance is found for any track, the largest cos angle across all tracks is recorded. Set to -2 if there are no tracks in the event.
 
 ### 3. Particle Flow Objects (`PfoMonData`)
 The final reconstructed particles (PFOs).
@@ -190,6 +203,21 @@ Truth-level information for every MC particle in Pandora's current MC particle l
 * **hasMatchedPfo**: Flag (0 or 1) indicating whether the MC particle was matched to a reconstructed PFO. A PFO is considered matched when the MC particle deposited at least `McPfoMatchEnergyFractionCut` (25% by default) of the PFO's hadronic energy; if the MC particle deposited energy into more than one PFO, the PFO with the largest energy deposition is selected. When several MC particles are matched to the same PFO, only the one with the largest energy contribution to that PFO keeps the match and the others are set to 0.
 * **matchedPfoPdg**: PDG code of the matched reconstructed PFO (from `pandora::ParticleFlowObject::GetParticleId()`), or `0` if no PFO was matched.
 
+### 6. Tracks (`TrackMonData`)
+Track-level kinematic variables and track-cluster association quantities for every track in Pandora's current track list. The track-cluster association is computed from the track's perspective, scanning all clusters to find the best-matching one (minimum perpendicular distance), as in `ClusterHelper::GetTrackClusterDistance` used by `TrackClusterAssociationAlgorithm`.
+* **pt**: Transverse momentum of the track at the distance of closest approach (GeV), computed as `sqrt(px² + py²)` from `pandora::Track::GetMomentumAtDca()`.
+* **theta**: Polar angle of the track momentum at the distance of closest approach (rad), computed as `acos(pz / |p|)`.
+* **p**: Total momentum of the track at the distance of closest approach (GeV), from `pandora::Track::GetMomentumAtDca().GetMagnitude()`.
+* **trackClusterDistance**: Perpendicular distance between this track's direction (at calorimeter) and the closest calo hit in the best-matching cluster, computed by scanning all clusters. The distance is the magnitude of the cross product of the track direction with the position difference vector to each hit, minimized over all clusters and their hits within the search layer and parallel distance cuts. Set to -1 if no cluster yields a valid distance or if the best distance exceeds `TcaMaxDistanceCut` (default 10 mm, mirroring `MaxTrackClusterDistance` in `TrackClusterAssociationAlgorithm`).
+* **trackClusterParallelDistance**: Parallel distance (projection of the position difference along the track direction) for the closest hit of the best-matching cluster that determined `trackClusterDistance`. Set to -1 if no cluster yields a valid distance or if the best distance exceeds `TcaMaxDistanceCut`.
+* **trackClusterCosAngle**: Cos(angle) between this track's direction and the best-matching cluster's initial direction. When a valid distance is found, this is the cos angle of that cluster; when no distance is found for any cluster (including when the best distance exceeds `TcaMaxDistanceCut`), the largest cos angle across all clusters is recorded. Set to -2 if there are no clusters in the event.
+* **matchedClusterEnergy**: Hadronic energy (GeV) of the best-matching cluster (the one that determined `trackClusterDistance`). Set to 0 if no cluster yields a valid distance (or if the best distance exceeds `TcaMaxDistanceCut`).
+* **matchedClusterStartLayer**: Inner pseudo-layer of the best-matching cluster (the one that determined `trackClusterDistance`). Set to 0 if no cluster yields a valid distance.
+* **matchedClusterNLayers**: Number of pseudo layers spanned by the best-matching cluster (`outer - inner + 1`). Set to 0 if no cluster yields a valid distance.
+* **matchedClusterIsEm**: Flag (0 or 1) indicating if the best-matching cluster passes Pandora's electromagnetic shower identification (`pCluster->PassPhotonId()`, from `LCParticleIdPlugins::LCEmShowerId`). Set to 0 if no cluster yields a valid distance.
+* **matchedClusterNHits**: Total number of calo hits in the best-matching cluster (`pCluster->GetNCaloHits()`). Set to 0 if no cluster yields a valid distance.
+* **matchedClusterNMipLikeHits**: Number of MIP-like calo hits in the best-matching cluster (`pCluster->GetNPossibleMipHits()`). Set to 0 if no cluster yields a valid distance.
+
 ## Output ROOT Tree Structure
 
 The output file `GaudiPfoMonitoring.root` contains a single TTree named `events` with the following branch naming convention:
@@ -201,6 +229,7 @@ The output file `GaudiPfoMonitoring.root` contains a single TTree named `events`
 | `clus_*` | Cluster-level vectors | N entries per event (one per cluster) |
 | `hit_*` | CaloHit-level vectors | N entries per event (one per hit) |
 | `mc_*` | MC particle-level vectors | N entries per event (one per MC particle) |
+| `trk_*` | Track-level vectors | N entries per event (one per track) |
 
 ## Usage
 
@@ -245,4 +274,4 @@ make -j$(nproc)
 make install
 ```
 
-The build system uses YAML-based code generation: the five YAML definition files (`PfoMonData.yaml`, `ClusterMonData.yaml`, `EventMonData.yaml`, `CaloHitMonData.yaml`, `MCParticleMonData.yaml`) are processed by `cmake/generate_pfo_monitoring.py` to produce C++ headers for the data classes and their Gaudi-compatible collections.
+The build system uses YAML-based code generation: the six YAML definition files (`PfoMonData.yaml`, `ClusterMonData.yaml`, `EventMonData.yaml`, `CaloHitMonData.yaml`, `MCParticleMonData.yaml`, `TrackMonData.yaml`) are processed by `cmake/generate_pfo_monitoring.py` to produce C++ headers for the data classes and their Gaudi-compatible collections.

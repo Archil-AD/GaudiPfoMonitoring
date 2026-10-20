@@ -127,6 +127,7 @@ private:
     bool m_createEventMonData;
     bool m_createCaloHitMonData;
     bool m_createMCParticleMonData;
+    bool m_createTrackMonData;
     std::string m_isolatedCaloHitListName; ///< The name of the dedicated isolated hit list
 
     float m_isolationCutDistanceFine2;      ///< Squared isolation cut distance for fine-granularity hits
@@ -149,6 +150,14 @@ private:
     float m_minHitSeparationCut1;           ///< First cut on minimum hit separation for low-angle cones
     float m_cosConeAngleWrtRadialCut2;      ///< Second cut on cosine of angle between cone axis and radial direction
     float m_minHitSeparationCut2;           ///< Second cut on minimum hit separation for low-angle cones
+
+    // TrackClusterAssociationAlgorithm parameters
+    float m_lowEnergyCut;                   ///< Energy cut (GeV). Algorithm prefers to associate tracks to high-energy clusters
+    unsigned int m_tcaMaxSearchLayer;       ///< Max pseudo layer to examine when calculating track-cluster distance
+    float m_tcaParallelDistanceCut;         ///< Max allowed projection of track-hit separation along track direction
+    float m_tcaMinTrackClusterCosAngle;     ///< Min cos(angle) between track and cluster initial direction
+    float m_tcaMaxDistanceCut;              ///< Max track-cluster perpendicular distance to record association variables (like MaxTrackClusterDistance in TrackClusterAssociationAlgorithm)
+    bool m_useClusterAssociatedTracks;      ///< If true, use cluster-associated tracks instead of all tracks for TrackClusterAssociation calculation
        
     int m_eventNumber; ///< running event counter, incremented every Run()
 };
