@@ -37,7 +37,6 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float> m_pfo_fNeutral;
         mutable std::vector<float> m_pfo_fPhoton;
         mutable std::vector<float> m_pfo_fCharged;
-        mutable std::vector<float> m_pfo_alpha;
         mutable std::vector<float> m_pfo_px;
         mutable std::vector<float> m_pfo_py;
         mutable std::vector<float> m_pfo_pz;
@@ -53,8 +52,10 @@ namespace GaudiPfoMonitoring
         mutable std::vector<float> m_pfo_minClusterDistance;
         mutable std::vector<unsigned int> m_pfo_startLayer;
         mutable std::vector<unsigned int> m_pfo_nLayers;
-        mutable std::vector<int> m_pfo_mcPdg;
-        mutable std::vector<float> m_pfo_mcEnergy;
+        mutable std::vector<unsigned int> m_pfo_hasMatchedMcParticle;
+        mutable std::vector<int> m_pfo_matchedMcPdg;
+        mutable std::vector<float> m_pfo_matchedMcEnergy;
+        mutable std::vector<float> m_pfo_matchedMcAlpha;
 
         // Event-level summary (one scalar per event)
         mutable int          m_evt_eventNumber;

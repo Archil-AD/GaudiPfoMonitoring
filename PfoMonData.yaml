@@ -18,9 +18,6 @@ members:
   - name: fCharged
     type: float
     description: "Fraction of hadronic energy from charged MC particles"
-  - name: alpha
-    type: float
-    description: "Opening angle between PFO momentum and matched MC particle momentum"
   - name: px
     type: float
     description: "Momentum X component"
@@ -66,9 +63,15 @@ members:
   - name: nLayers
     type: uint32_t
     description: "Number of layers spanned by the PFO clusters"
-  - name: mcPdg
+  - name: hasMatchedMcParticle
+    type: uint32_t
+    description: "1 if the PFO has a matched MC particle (MC deposited at least the configured energy fraction of the PFO energy), 0 otherwise"
+  - name: matchedMcPdg
     type: int32_t
-    description: "PDG code of the best matched MC particle"
-  - name: mcEnergy
+    description: "PDG code of the matched MC particle for this PFO (the winning contributor above the energy-fraction cut), 0 if no match"
+  - name: matchedMcEnergy
     type: float
-    description: "Energy of the best matched MC particle"
+    description: "Energy of the matched MC particle for this PFO, 0 if no match"
+  - name: matchedMcAlpha
+    type: float
+    description: "Opening angle between the PFO momentum and the momentum of the matched MC particle (the same particle as matchedMcPdg); -1 if no match"

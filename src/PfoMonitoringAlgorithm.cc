@@ -75,10 +75,7 @@ typedef std::set<const pandora::Cluster *> ClusterSet;
 namespace lc_content {
 
 PfoMonitoringAlgorithm::PfoMonitoringAlgorithm()
-    : m_nCorrectNeutralHadronPfo(0), m_nWrongNeutralHadronPfo(0),
-      m_nCorrectChargedHadronPfo(0), m_nWrongChargedHadronPfo(0),
-      m_neutralHadronEnergyFractionCut(0.7),
-      m_mcPfoMatchEnergyFractionCut(0.5f), m_createPfoMonData(true),
+    : m_mcPfoMatchEnergyFractionCut(0.5f), m_createPfoMonData(true),
       m_createClusterMonData(true), m_createEventMonData(true),
       m_createCaloHitMonData(true), m_createMCParticleMonData(true),
       m_createTrackMonData(true),
@@ -121,14 +118,6 @@ PfoMonitoringAlgorithm::~PfoMonitoringAlgorithm() {
   std::cout << " ------------------------------------------------------------ "
             << std::endl;
   std::cout << std::endl;
-  std::cout << " Correct Charged Hadron Pfos: " << m_nCorrectChargedHadronPfo
-            << std::endl;
-  std::cout << " Wrong Charged Hadron Pfos: " << m_nWrongChargedHadronPfo
-            << std::endl;
-  std::cout << " Correct Neutral Hadron Pfos: " << m_nCorrectNeutralHadronPfo
-            << std::endl;
-  std::cout << " Wrong Neutral Hadron Pfos: " << m_nWrongNeutralHadronPfo
-            << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -391,6 +380,16 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       mcEnergyInPfo;
   std::unordered_map<const ParticleFlowObject *, float> pfoTotalEnergy;
 
+  // Map from PFO to the INDEX of its PfoMonData object inside the collection,
+  // so the PFO->MCParticle match (computed below with the same energy-fraction
+  // logic as the MCParticle monitoring data) can be written back onto the PFO
+  // monitoring objects.
+  // NOTE: an index is stored rather than a pointer to the element because the
+  // collection is a std::vector and PfoMonDataCollection::create() appends to
+  // it, which can reallocate the underlying buffer and invalidate any
+  // previously obtained element address (dangling pointer -> crash).
+  std::unordered_map<const ParticleFlowObject *, std::size_t> pfoToPfoDataIndex;
+
   //--------------------------------------------------------------------------------------------------------------
   // Fill PFO monitoring data from pPfoList
   try {
@@ -456,6 +455,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       if (!m_createPfoMonData || !pfoColl)
         continue;
       auto &pfoData = pfoColl->create();
+      pfoToPfoDataIndex[pPfo] = pfoColl->size() - 1;
       pfoData.setEnergy(pfoEnergy);
       pfoData.setPdg(pfoPid);
       pfoData.setPx(px);
@@ -473,52 +473,31 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       pfoData.setMinClusterDistance(minClusterDistance);
       pfoData.setStartLayer(pfoStartLayer);
       pfoData.setNLayers(pfoNLayers);
-      pfoData.setAlpha(0.f);
-
       // Default MC values in case matching fails
-      pfoData.setMcPdg(0);
-      pfoData.setMcEnergy(0.f);
+      pfoData.setHasMatchedMcParticle(0u);
+      pfoData.setMatchedMcPdg(0);
+      pfoData.setMatchedMcEnergy(0.f);
+      pfoData.setMatchedMcAlpha(-1.f);
 
-      if (trackList.size() == 1) // charged PFO
+      // fill m_trackMcPfoTargets later used for charged/neutral energy
+      // classification
+      if (trackList.size() > 0) // charged PFO
       {
-        try {
-          const Track *const pTrack = trackList.front();
-          const MCParticle *const pMCParticle(
-              MCParticleHelper::GetMainMCParticle(pTrack));
-
-          if (pMCParticle) {
-            m_trackMcPfoTargets.push_back(pMCParticle);
-
-            // if MC particle is pi+/-, K+/- or proton then this is a correct
-            // assignment
-            if (std::abs(pMCParticle->GetParticleId()) == 211 ||
-                std::abs(pMCParticle->GetParticleId()) == 321 ||
-                std::abs(pMCParticle->GetParticleId()) == 2212)
-              m_nCorrectChargedHadronPfo++;
-            else
-              m_nWrongChargedHadronPfo++;
-
-            pfoData.setMcPdg(pMCParticle->GetParticleId());
-            pfoData.setMcEnergy(pMCParticle->GetEnergy());
-
-            // Opening angle between PFO and MC particle
-            const CartesianVector &mcMomentum(pMCParticle->GetMomentum());
-            if (momentum.GetMagnitudeSquared() >
-                    std::numeric_limits<float>::epsilon() &&
-                mcMomentum.GetMagnitudeSquared() >
-                    std::numeric_limits<float>::epsilon()) {
-              pfoData.setAlpha(std::acos(std::max(
-                  -1.f,
-                  std::min(1.f, momentum.GetCosOpeningAngle(mcMomentum)))));
+        for (const Track *const pTrack : trackList) {
+          try {
+            const MCParticle *const pMCParticle(
+                MCParticleHelper::GetMainMCParticle(pTrack));
+            if (pMCParticle) {
+              m_trackMcPfoTargets.push_back(pMCParticle);
             }
+          } catch (StatusCodeException &e) {
+            // This usually means Track-to-MC matching is not initialized in the
+            // Pandora instance
+            static int errorCount = 0;
+            if (errorCount++ < 10)
+              std::cout << "[PfoMonitoring] MC match not found for track: "
+                        << e.ToString() << std::endl;
           }
-        } catch (StatusCodeException &e) {
-          // This usually means Track-to-MC matching is not initialized in the
-          // Pandora instance
-          static int errorCount = 0;
-          if (errorCount++ < 10)
-            std::cout << "[PfoMonitoring] MC match not found for track: "
-                      << e.ToString() << std::endl;
         }
       }
 
@@ -531,8 +510,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       float photonEnergy(0.f);
       float chargedEnergy(0.f);
 
-      // find energy fractions and the MC particle with largest (reco) energy
-      // contribution
+      // find energy fractions of MC particles in this PFO clusters
       for (ClusterList::const_iterator clusterIter = clusterList.begin();
            clusterIter != clusterList.end(); ++clusterIter) {
         const Cluster *const pCluster = *clusterIter;
@@ -562,40 +540,6 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       pfoData.setFNeutral(fNeutral);
       pfoData.setFPhoton(fPhoton);
       pfoData.setFCharged(fCharged);
-
-      if (trackList.empty()) // neutral PFO
-      {
-        try {
-          const MCParticle *const pBestMCMatch =
-              this->GetBestMCParticleMatch(mcParticleContributions);
-
-          if (pBestMCMatch) {
-            if (fNeutral > m_neutralHadronEnergyFractionCut)
-              m_nCorrectNeutralHadronPfo++;
-            else
-              m_nWrongNeutralHadronPfo++;
-
-            pfoData.setMcPdg(pBestMCMatch->GetParticleId());
-            pfoData.setMcEnergy(pBestMCMatch->GetEnergy());
-
-            // Opening angle alpha between PFO and MC particle
-            const CartesianVector &mcMomentum(pBestMCMatch->GetMomentum());
-            if (momentum.GetMagnitudeSquared() >
-                    std::numeric_limits<float>::epsilon() &&
-                mcMomentum.GetMagnitudeSquared() >
-                    std::numeric_limits<float>::epsilon()) {
-              pfoData.setAlpha(std::acos(std::max(
-                  -1.f,
-                  std::min(1.f, momentum.GetCosOpeningAngle(mcMomentum)))));
-            }
-          }
-        } catch (StatusCodeException &e) {
-          static int errorCountNeutral = 0;
-          if (errorCountNeutral++ < 10)
-            std::cout << "[PfoMonitoring] MC match error for neutral: "
-                      << e.ToString() << std::endl;
-        }
-      } // neutral PFO
     }
   } catch (const pandora::StatusCodeException &e) {
     std::cout
@@ -1749,7 +1693,7 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
         mcBestPfo[pMC] = bestPfo;
         mcBestPfoEnergy[pMC] = bestDepositedEnergy;
       }
-    }
+    } // found the best PFO for each MC particle
 
     // When several MC particles are matched to the same PFO, keep only the one
     // with the largest energy contribution to that PFO.
@@ -1763,6 +1707,42 @@ pandora::StatusCode PfoMonitoringAlgorithm::Run() {
       if (winnerIter == pfoWinner.end() ||
           depositedEnergy > mcBestPfoEnergy[winnerIter->second]) {
         pfoWinner[pPfo] = pMC;
+      }
+    } // found the best MC particle for each PFO
+
+    // Write back the PFO->MCParticle match onto the PFO monitoring data.
+    // NOTE: this block is inside the `m_createMCParticleMonData` guard above,
+    // so the PFO->MCParticle match is only filled on PfoMonData when
+    // `CreateMCParticleMonData` is true (matching the MCParticleMonData logic).
+    if (m_createPfoMonData && pfoColl) {
+      for (const ParticleFlowObject *const pPfo : *pPfoList) {
+        const auto pfoDataIter = pfoToPfoDataIndex.find(pPfo);
+        if (pfoDataIter == pfoToPfoDataIndex.end())
+          continue;
+        const std::size_t pfoDataIndex(pfoDataIter->second);
+        if (pfoDataIndex >= pfoColl->size())
+          continue;
+        auto &pfoData = (*pfoColl)[pfoDataIndex];
+        const auto winnerIter = pfoWinner.find(pPfo);
+        if (winnerIter != pfoWinner.end()) {
+          const MCParticle *const pMatchedMc = winnerIter->second;
+          pfoData.setHasMatchedMcParticle(1u);
+          pfoData.setMatchedMcPdg(pMatchedMc->GetParticleId());
+          pfoData.setMatchedMcEnergy(pMatchedMc->GetEnergy());
+
+          // Store the opening angle between the momentum of the matched MC
+          // particle and the PFO momentum
+          const CartesianVector &mcMomentum(pMatchedMc->GetMomentum());
+          const CartesianVector &pfoMomentum(pPfo->GetMomentum());
+          if (pfoMomentum.GetMagnitudeSquared() >
+                  std::numeric_limits<float>::epsilon() &&
+              mcMomentum.GetMagnitudeSquared() >
+                  std::numeric_limits<float>::epsilon()) {
+            pfoData.setMatchedMcAlpha(std::acos(std::max(
+                -1.f,
+                std::min(1.f, pfoMomentum.GetCosOpeningAngle(mcMomentum)))));
+          }
+        }
       }
     }
 
@@ -2163,11 +2143,6 @@ const MCParticle *PfoMonitoringAlgorithm::GetClusterMCParticleInfo(
 
 pandora::StatusCode
 PfoMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
-
-  PANDORA_RETURN_RESULT_IF_AND_IF(
-      STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
-      XmlHelper::ReadValue(xmlHandle, "NeutralHadronEnergyFractionCut",
-                           m_neutralHadronEnergyFractionCut));
 
   PANDORA_RETURN_RESULT_IF_AND_IF(
       STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,

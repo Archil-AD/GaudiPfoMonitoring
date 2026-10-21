@@ -58,11 +58,10 @@ The `PfoMonitoringAlgorithm` exposes the following configurable parameters via P
 | `CreateMCParticleMonData` | bool | `true` | Enable/disable MC particle-level monitoring |
 | `CreateTrackMonData` | bool | `true` | Enable/disable track-level monitoring |
 
-### Neutral hadron classification
+### MCParticle <-> PFO matching parameter
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `NeutralHadronEnergyFractionCut` | float | `0.7` | Minimum neutral energy fraction for a neutral PFO to be classified as a correct neutral hadron |
-| `McPfoMatchEnergyFractionCut` | float | `0.25` | Minimum fraction of a PFO's energy that must be deposited by an MC particle for that PFO to be considered matched to the MC particle |
+| `McPfoMatchEnergyFractionCut` | float | `0.5` | Minimum fraction of a PFO's energy that must be deposited by an MC particle for that PFO to be considered matched to the MC particle |
 
 ### Isolation parameters (CaloHit monitoring)
 | Parameter | Type | Default | Description |
@@ -167,12 +166,11 @@ Describes the topological clusters formed from hits, with variables used for sho
 ### 3. Particle Flow Objects (`PfoMonData`)
 The final reconstructed particles (PFOs).
 * **energy, px, py, pz, mass, pdg**: Standard 4-momentum and particle identity.
-* **alpha**: Angular separation between the PFO and its matched MC particle.
 * **fNeutral / fPhoton / fCharged**: Fractions of hadronic energy originating from specific MC particle types, used to study "confusion".
 * **nHits**: Total number of hits, with breakdowns for `nEcalHits`, `nHcalHits`, `nMipLikeHits`, `nMipEcalHits`, and `nMipHcalHits`.
 * **startLayer / nLayers**: Longitudinal extent of the constituent clusters.
 * **nClusters / nEmClusters**: Number of constituent clusters.
-* **mcPdg / mcEnergy**: MC truth identity and energy.
+* **hasMatchedMcParticle**, **matchedMcPdg**, **matchedMcEnergy**, **matchedMcAlpha**: PFO->MCParticle match using the same energy-fraction logic as the MCParticle monitoring data (flag, PDG, energy and opening angle with the matched MC particle). These fields are only filled when `CreateMCParticleMonData` is true; otherwise they remain at their defaults (0 / 0 / 0 / -1). A PFO is considered matched when an MC particle deposited at least `McPfoMatchEnergyFractionCut` (25% by default) of the PFO's hadronic energy; if an MC particle deposited energy into more than one PFO, the PFO with the largest energy deposition is selected. When several MC particles are matched to the same PFO, only the one with the largest energy contribution to that PFO keeps the match and the others are set to 0.
 * **minClusterDistance**: Proximity of the PFO's clusters to the lead cluster.
 
 ### 4. Event Summary (`EventMonData`)
